@@ -120,7 +120,7 @@ HeatConductionMaterialTempl<is_ad>::computeProperties()
             << "\ttemp: " << qp_temperature << "\n"
             << "\telem: " << _current_elem->id() << "\n"
             << "\tproc: " << processor_id() << "\n";
-        mooseWarning(msg.str());
+        mooseDoOnce(mooseWarning(msg.str()));
         qp_temperature = 0;
       }
     }
