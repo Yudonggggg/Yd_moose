@@ -113,13 +113,6 @@ public:
   void
   nonlinearBounded(NSReal & guess, R & computeResidual, J & computeJacobian, B & computeBounds);
   ///@}
-  // @{ Perform a damped newton solve
-  template <typename R, typename J, typename C>
-  void nonlinearDamped(NSRealVectorValue & guess,
-                       R & computeResidual,
-                       J & computeJacobian,
-                       C & computeCondition);
-  ///@}
   ///@{ default values
   static Real relativeToleranceDefault() { return 1e-8; }
   static Real absoluteToleranceDefault() { return 1e-13; }
@@ -137,9 +130,9 @@ public:
 
   Real _relative_tolerance_square;
   Real _absolute_tolerance_square;
-  // Threshold for minimum step size of linear iterations
+  /// Threshold for minimum step size of linear iterations
   Real _delta_thresh;
-  // Damping factor
+  /// Damping factor
   Real _damping_factor;
   unsigned int _max_damping_iterations;
 
@@ -227,7 +220,7 @@ NestedSolveTempl<is_ad>::nonlinear(NestedSolveTempl<is_ad>::DynamicVector & gues
                                    R & computeResidual,
                                    J & computeJacobian)
 {
-  // adaptor functor to utilize the Eigen non-linear solver
+  /// adaptor functor to utilize the Eigen non-linear solver
   auto functor = make_adaptor<true>(computeResidual, computeJacobian);
   Eigen::HybridNonLinearSolver<decltype(functor), NSReal> solver(functor);
   auto status = solver.solve(guess);
@@ -245,7 +238,7 @@ NestedSolveTempl<is_ad>::nonlinear(NSReal & guess, R & computeResidual, J & comp
 {
   using V = NestedSolveTempl<is_ad>::DynamicVector;
 
-  // adaptor functor to utilize the Eigen non-linear solver
+  /// adaptor functor to utilize the Eigen non-linear solver
   auto functor = make_real_adaptor<true>(computeResidual, computeJacobian);
   Eigen::HybridNonLinearSolver<decltype(functor), NSReal> solver(functor);
   V guess_eigen(1);
@@ -253,7 +246,7 @@ NestedSolveTempl<is_ad>::nonlinear(NSReal & guess, R & computeResidual, J & comp
   const auto & r_square = functor.getResidualNorm();
   solver.solveInit(guess_eigen);
 
-  // compute first residual norm for relative convergence checks
+  /// compute first residual norm for relative convergence checks
   auto r0_square = r_square;
   if (r0_square == 0)
   {
@@ -261,12 +254,12 @@ NestedSolveTempl<is_ad>::nonlinear(NSReal & guess, R & computeResidual, J & comp
     return;
   }
 
-  // perform non-linear iterations
+  /// perform non-linear iterations
   _n_iterations = 1;
   while (_n_iterations <= _max_iterations &&
          solver.solveOneStep(guess_eigen) == Eigen::HybridNonLinearSolverSpace::Running)
   {
-    // check convergence
+    /// check convergence
     if (_n_iterations >= _min_iterations && isConverged(r0_square, r_square, /*acceptable=*/false))
     {
       guess = guess_eigen(0);
@@ -275,8 +268,9 @@ NestedSolveTempl<is_ad>::nonlinear(NSReal & guess, R & computeResidual, J & comp
     _n_iterations++;
   }
 
-  // if we exceed the max iterations, we could still be converged
-  // (considering the acceptable multiplier)
+  /** if we exceed the max iterations, we could still be converged
+  (considering the acceptable multiplier)
+  */
   if (!isConverged(r0_square, r_square, /*acceptable=*/true))
     _state = State::NOT_CONVERGED;
 
@@ -292,7 +286,7 @@ NestedSolveTempl<is_ad>::nonlinear(NSRealVectorValue & guess,
 {
   using V = NestedSolveTempl<is_ad>::DynamicVector;
 
-  // adaptor functor to utilize the Eigen non-linear solver
+  /// adaptor functor to utilize the Eigen non-linear solver
   auto functor = make_realvector_adaptor<true>(computeResidual, computeJacobian);
   Eigen::HybridNonLinearSolver<decltype(functor), NSReal> solver(functor);
   V guess_eigen(3);
@@ -315,7 +309,7 @@ NestedSolveTempl<is_ad>::nonlinearTight(NestedSolveTempl<is_ad>::DynamicVector &
                                         R & computeResidual,
                                         J & computeJacobian)
 {
-  // adaptor functor to utilize the Eigen non-linear solver
+  /// adaptor functor to utilize the Eigen non-linear solver
   auto functor = make_adaptor<false>(computeResidual, computeJacobian);
   Eigen::HybridNonLinearSolver<decltype(functor), NSReal> solver(functor);
   auto status = solver.solve(guess);
@@ -333,7 +327,7 @@ NestedSolveTempl<is_ad>::nonlinearTight(NSReal & guess, R & computeResidual, J &
 {
   using V = NestedSolveTempl<is_ad>::DynamicVector;
 
-  // adaptor functor to utilize the Eigen non-linear solver
+  /// adaptor functor to utilize the Eigen non-linear solver
   auto functor = make_real_adaptor<false>(computeResidual, computeJacobian);
   Eigen::HybridNonLinearSolver<decltype(functor), NSReal> solver(functor);
   V guess_eigen(1);
@@ -356,7 +350,7 @@ NestedSolveTempl<is_ad>::nonlinearTight(NSRealVectorValue & guess,
 {
   using V = NestedSolveTempl<is_ad>::DynamicVector;
 
-  // adaptor functor to utilize the Eigen non-linear solver
+  /// adaptor functor to utilize the Eigen non-linear solver
   auto functor = make_realvector_adaptor<false>(computeResidual, computeJacobian);
   Eigen::HybridNonLinearSolver<decltype(functor), NSReal> solver(functor);
   V guess_eigen(3);
@@ -396,7 +390,7 @@ NestedSolveTempl<is_ad>::nonlinearBounded(NSReal & guess,
     status = solver.solveOneStep(guess_eigen);
     const std::pair<Real, Real> & bounds = computeBounds();
 
-    // Snap to bounds. Terminate solve if we snap twice consecutively.
+    /// Snap to bounds. Terminate solve if we snap twice consecutively.
     if (guess_eigen(0) < bounds.first || guess_eigen(0) > bounds.second)
     {
       if (guess_eigen(0) < bounds.first)
@@ -435,7 +429,7 @@ NestedSolveTempl<is_ad>::nonlinear(V & guess, T && compute)
   _n_iterations = 0;
   compute(guess, residual, jacobian);
 
-  // compute first residual norm for relative convergence checks
+  /// compute first residual norm for relative convergence checks
   auto r0_square = normSquare(residual);
   if (r0_square == 0)
   {
@@ -444,17 +438,17 @@ NestedSolveTempl<is_ad>::nonlinear(V & guess, T && compute)
   }
   auto r_square = r0_square;
 
-  // perform non-linear iterations
+  /// perform non-linear iterations
   while (_n_iterations < _max_iterations)
   {
-    // check convergence
+    /// check convergence
     if (_n_iterations >= _min_iterations && isConverged(r0_square, r_square, /*acceptable=*/false))
       return;
 
-    // solve and apply next increment
+    /// solve and apply next increment
     linear(jacobian, delta, residual);
 
-    // // Check if step size is smaller than the floating point tolerance
+    /// Check if step size is smaller than the floating point tolerance
     if (isRelSmall(delta, guess, _delta_thresh))
     {
       _state = State::CONVERGED_XTOL;
@@ -464,14 +458,15 @@ NestedSolveTempl<is_ad>::nonlinear(V & guess, T && compute)
     guess -= delta;
     _n_iterations++;
 
-    // compute residual and jacobian for the next iteration
+    /// compute residual and jacobian for the next iteration
     compute(guess, residual, jacobian);
 
     r_square = normSquare(residual);
   }
 
-  // if we exceed the max iterations, we could still be converged
-  // (considering the acceptable multiplier)
+  /** if we exceed the max iterations, we could still be converged
+  (considering the acceptable multiplier)
+  */
   if (!isConverged(r0_square, r_square, /*acceptable=*/true))
     _state = State::NOT_CONVERGED;
 }
@@ -489,7 +484,7 @@ NestedSolveTempl<is_ad>::nonlinearDamped(V & guess, T && compute, C && computeCo
   _n_iterations = 0;
   compute(guess, residual, jacobian);
 
-  // compute first residual norm for relative convergence checks
+  /// compute first residual norm for relative convergence checks
   auto r0_square = normSquare(residual);
   if (r0_square == 0)
   {
@@ -498,17 +493,17 @@ NestedSolveTempl<is_ad>::nonlinearDamped(V & guess, T && compute, C && computeCo
   }
   auto r_square = r0_square;
 
-  // perform non-linear iterations
+  /// perform non-linear iterations
   while (_n_iterations < _max_iterations)
   {
-    // check convergence
+    /// check convergence
     if (_n_iterations >= _min_iterations && isConverged(r0_square, r_square, /*acceptable=*/false))
       return;
 
-    // solve and apply next increment
+    /// solve and apply next increment
     linear(jacobian, delta, residual);
 
-    // // Check if step size is smaller than the floating point tolerance
+    /// Check if step size is smaller than the floating point tolerance
     if (isRelSmall(delta, guess, _delta_thresh))
     {
       _state = State::CONVERGED_XTOL;
@@ -528,16 +523,16 @@ NestedSolveTempl<is_ad>::nonlinearDamped(V & guess, T && compute, C && computeCo
     }
     _n_iterations++;
 
-    // compute residual and jacobian for the next iteration
+    /// compute residual and jacobian for the next iteration
     compute(guess, residual, jacobian);
 
     r_square = normSquare(residual);
   }
 
-  // if we exceed the max iterations, we could still be converged
-  // (considering the acceptable multiplier)
+  /// @{ if we exceed the max iterations, we could still be converged (considering the acceptable multiplier)
   if (!isConverged(r0_square, r_square, /*acceptable=*/true))
     _state = State::NOT_CONVERGED;
+  /// @}
 }
 
 template <bool is_ad>
@@ -545,7 +540,7 @@ template <typename J, typename V>
 void
 NestedSolveTempl<is_ad>::linear(const J & A, V & x, const V & b) const
 {
-  // we could make the linear solve method configurable here
+  /// we could make the linear solve method configurable here
   x = A.partialPivLu().solve(b);
 }
 
@@ -554,7 +549,7 @@ template <typename V>
 Real
 NestedSolveTempl<is_ad>::normSquare(const V & v)
 {
-  // we currently cannot get the raw_value of an AD Eigen Matrix, so we loop over components
+  /// we currently cannot get the raw_value of an AD Eigen Matrix, so we loop over components
   Real norm_square = 0.0;
   for (const auto i : index_range(v))
     norm_square += Utility::pow<2>(MetaPhysicL::raw_value(v.data()[i]));
@@ -745,7 +740,7 @@ private:
   Real _residual_norm;
 };
 
-} // namespace NestedSolveInternal
+} /// namespace NestedSolveInternal
 
 template <bool is_ad>
 template <bool store_residual_norm, typename R, typename J>
@@ -773,7 +768,7 @@ NestedSolveTempl<is_ad>::make_realvector_adaptor(R & residual_lambda, J & jacobi
       residual_lambda, jacobian_lambda);
 }
 
-// lambda to check for convergence and set the state accordingly
+/// lambda to check for convergence and set the state accordingly
 template <bool is_ad>
 bool
 NestedSolveTempl<is_ad>::isConverged(const Real r0_square, Real r_square, bool acceptable)
