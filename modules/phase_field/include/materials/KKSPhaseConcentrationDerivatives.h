@@ -34,7 +34,7 @@ protected:
   /// @{ Phase concentrations
   const std::vector<MaterialPropertyName> _ci_names;
   std::vector<const MaterialProperty<Real> *> _prop_ci;
-  /// @} 
+  /// @}
 
   /// Derivative of phase concentrations wrt global concentrations \f$ \frac d{db} c_i \f$
   std::vector<std::vector<std::vector<MaterialProperty<Real> *>>> _dcidb;
@@ -51,7 +51,6 @@ protected:
    db_i} F_i \f$
   */
   std::vector<std::vector<std::vector<const MaterialProperty<Real> *>>> _d2Fidcidbi;
-
 
   /// Switching function
   const MaterialProperty<Real> & _prop_h;

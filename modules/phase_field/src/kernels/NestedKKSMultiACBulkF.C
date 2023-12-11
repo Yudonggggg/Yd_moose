@@ -127,7 +127,7 @@ NestedKKSMultiACBulkF::computeDFDOP(PFFunctionType type)
       {
         Real sum1 = 0.0;
 
-        for (const auto n: make_range(_num_c))
+        for (const auto n : make_range(_num_c))
           sum1 += (*_dF1dc1[n])[_qp] * (*_dcidetaj[n][m][_k])[_qp];
 
         sum +=

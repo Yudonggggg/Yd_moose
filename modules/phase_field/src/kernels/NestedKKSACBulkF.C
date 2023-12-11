@@ -55,22 +55,22 @@ NestedKKSACBulkF::NestedKKSACBulkF(const InputParameters & parameters)
   /// @}
 
   /// @{ _dcideta and _dcid are computed in KKSPhaseConcentrationDerivatives
-  for (const auto m: make_range(_num_c))
+  for (const auto m : make_range(_num_c))
   {
     _dcideta[m].resize(2);
     _dcidb[m].resize(2);
-    for (const auto n: make_range(2))
+    for (const auto n : make_range(2))
     {
       _dcideta[m][n] = &getMaterialPropertyDerivative<Real>(_ci_names[m * 2 + n], _var.name());
       _dcidb[m][n].resize(_num_c);
 
-      for (const auto l: make_range(_num_c))
+      for (const auto l : make_range(_num_c))
         _dcidb[m][n][l] = &getMaterialPropertyDerivative<Real>(_ci_names[m * 2 + n], _c_names[l]);
     }
   }
 
   /// @{ _dFadca and _dFbdcb are computed in KKSPhaseConcentrationMaterial
-  for (const auto m: make_range(_num_c))
+  for (const auto m : make_range(_num_c))
   {
     _dFadca[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ci_names[m * 2]);
     _dFbdcb[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fb_name, _ci_names[m * 2 + 1]);
@@ -78,7 +78,7 @@ NestedKKSACBulkF::NestedKKSACBulkF(const InputParameters & parameters)
   /// @}
 
   /// @{ _dFadarg and _dFbdarg are computed in KKSPhaseConcentrationMaterial
-  for (const auto m: make_range(_n_args))
+  for (const auto m : make_range(_n_args))
   {
     _dFadarg[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, m);
     _dFbdarg[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fb_name, m);
@@ -97,7 +97,7 @@ NestedKKSACBulkF::computeDFDOP(PFFunctionType type)
 
     case Jacobian:
       Real sum = 0.0;
-      for (const auto m: make_range(_num_c))
+      for (const auto m : make_range(_num_c))
         sum += (*_dFadca[m])[_qp] * (*_dcideta[m][0])[_qp] -
                (*_dFbdcb[m])[_qp] * (*_dcideta[m][1])[_qp];
 
@@ -118,7 +118,7 @@ NestedKKSACBulkF::computeQpOffDiagJacobian(unsigned int jvar)
   if (compvar >= 0)
   {
     Real sum = 0.0;
-    for (const auto m: make_range(_num_c))
+    for (const auto m : make_range(_num_c))
       sum += (*_dFadca[m])[_qp] * (*_dcidb[m][0][compvar])[_qp] -
              (*_dFbdcb[m])[_qp] * (*_dcidb[m][1][compvar])[_qp];
 
@@ -132,6 +132,6 @@ NestedKKSACBulkF::computeQpOffDiagJacobian(unsigned int jvar)
   res -= _L[_qp] * _prop_dh[_qp] * ((*_dFadarg[cvar])[_qp] - (*_dFbdarg[cvar])[_qp]) *
          _phi[_j][_qp] * _test[_i][_qp];
   /// @}
-  
+
   return res;
 }

@@ -157,9 +157,9 @@ KKSPhaseConcentrationDerivatives::computeQpProperties()
   /// @}
 
   /// @{ compute x_eta
-  for (const auto m : make_range(_num_c*2))
+  for (const auto m : make_range(_num_c * 2))
   {
-    for (const auto n : make_range(_num_c*2))
+    for (const auto n : make_range(_num_c * 2))
       x_eta[m] += A(m, n) * k_eta[n];
   }
   /// @}

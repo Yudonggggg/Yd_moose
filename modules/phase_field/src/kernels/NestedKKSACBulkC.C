@@ -40,45 +40,45 @@ NestedKKSACBulkC::NestedKKSACBulkC(const InputParameters & parameters)
     _d2Fadcadarg(_n_args)
 {
   /// @{ Declare _prop_ci to be a matrix for easy reference. In _prop_ci[m][n], m is species index, n is the phase index.
-  for (const auto m: make_range(_num_c))
+  for (const auto m : make_range(_num_c))
   {
     _prop_ci[m].resize(2);
-    for (const auto n: make_range(2))
+    for (const auto n : make_range(2))
       _prop_ci[m][n] = &getMaterialPropertyByName<Real>(_ci_names[m * 2 + n]);
   }
   /// @}
 
   /// @{ _dcideta and _dcidb are computed in KKSPhaseConcentrationDerivatives
-  for (const auto m: make_range(_num_c))
+  for (const auto m : make_range(_num_c))
   {
     _dcideta[m].resize(2);
     _dcidb[m].resize(2);
-    for (const auto n: make_range(2))
+    for (const auto n : make_range(2))
     {
       _dcideta[m][n] = &getMaterialPropertyDerivative<Real>(_ci_names[m * 2 + n], _var.name());
       _dcidb[m][n].resize(_num_c);
-      for (const auto l: make_range(_num_c))
+      for (const auto l : make_range(_num_c))
         _dcidb[m][n][l] = &getMaterialPropertyDerivative<Real>(_ci_names[m * 2 + n], _c_names[l]);
     }
   }
-  /// @} 
+  /// @}
 
   /// @{ _dFadca and _d2Fadcadba are computed in KKSPhaseConcentrationMaterial
-  for (const auto m: make_range(_num_c))
+  for (const auto m : make_range(_num_c))
   {
     _dFadca[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ci_names[m * 2]);
     _d2Fadcadba[m].resize(_num_c);
-    for (const auto n: make_range(_num_c))
+    for (const auto n : make_range(_num_c))
       _d2Fadcadba[m][n] =
           &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ci_names[m * 2], _ci_names[n * 2]);
   }
   /// @}
 
   /// @{ _d2Fadcadarg are computed in KKSPhaseConcentrationMaterial
-  for (const auto m: make_range(_num_c))
+  for (const auto m : make_range(_num_c))
   {
     _d2Fadcadarg[m].resize(_n_args);
-    for (const auto n: make_range(_n_args))
+    for (const auto n : make_range(_n_args))
       _d2Fadcadarg[m][n] =
           &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ci_names[m * 2], n);
   }

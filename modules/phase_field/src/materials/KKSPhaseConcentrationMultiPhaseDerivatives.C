@@ -117,7 +117,7 @@ KKSPhaseConcentrationMultiPhaseDerivatives::computeQpProperties()
   for (const auto m : make_range(_num_c))
   {
     // equal chemical potential derivative equations
-    for (const auto n : make_range(_num_j-1))
+    for (const auto n : make_range(_num_j - 1))
     {
       for (const auto l : make_range(_num_c))
       {
@@ -125,7 +125,7 @@ KKSPhaseConcentrationMultiPhaseDerivatives::computeQpProperties()
         A(m * _num_j + n, n + l * _num_j + 1) = -(*_d2Fidcidbi[n + 1][m][l])[_qp];
       }
     }
-  /// @}
+    /// @}
 
     // concentration conservation derivative equations
     for (const auto n : make_range(_num_j))

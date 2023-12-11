@@ -91,7 +91,7 @@ protected:
   /// @{ Condition that must be violated for damping to occur
   MaterialName _condition_name;
   MaterialBase * _condition;
-  const MaterialProperty<Real> * _C ;
+  const MaterialProperty<Real> * _C;
   /// @}
 
   /// Instantiation of the NestedSolve class
