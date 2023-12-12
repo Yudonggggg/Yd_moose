@@ -1,0 +1,37 @@
+[Tests]
+  design = 'Restartable.md'
+  issues = '#23352'
+
+  [store]
+    type = 'RunApp'
+    input = 'late_restart_load.i'
+    allow_test_objects = true
+    recover = false
+    cli_args = 'UserObjects/test/test_method=store
+                Outputs/checkpoint=true'
+    requirement = 'The system shall support the storing of a value that can be loaded after initialization in a later execution'
+  []
+  [load]
+    type = 'RunApp'
+    input = 'late_restart_load.i'
+    allow_test_objects = true
+    recover = false
+    cli_args = 'UserObjects/test/test_method=load
+                Problem/restart_file_base=late_restart_load_out_cp/LATEST'
+    prereq = store
+    requirement = 'The system shall support the loading of a restarted value after initialization'
+  []
+  [load_no_store]
+    type = 'RunApp'
+    # Eventually, we will probably want to error here when we load a value after
+    # we have skipped restart/recover. But I'm not sure and I don't have the time
+    # to implement it at the moment, so we should at least verify that this
+    # behavior is consistent
+    input = 'late_restart_load.i'
+    allow_test_objects = true
+    recover = false
+    cli_args = 'UserObjects/test/test_method=load_no_restart'
+    prereq = store
+    requirement = 'The system shall support the loading of a default (not loaded) restarted value after initialization'
+  []
+[]

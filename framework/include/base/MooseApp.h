@@ -86,8 +86,10 @@ public:
     std::vector<PostprocessorName> sub_transformed_pps;
   };
 
+  /// The name used for registering mesh meta data as restartable meta data
+  static const RestartableDataMapName MESH_META_DATA_NAME;
+  /// Deprecated name to be used for registering mesh metadata; requires griffin patch
   static const RestartableDataMapName MESH_META_DATA;
-  static const std::string MESH_META_DATA_SUFFIX;
 
   static InputParameters validParams();
 
@@ -613,16 +615,21 @@ public:
                                                  bool read_only,
                                                  const RestartableDataMapName & metaname = "");
 
-  /*
-   * Deprecated method to register a piece of restartable data.
+  /**
+   * @return Whether or not restartable data with the name \p metaname (if any, otherwise
+   * the primary metadata) has been restored at least once
    *
-   * Use the call without a data name instead.
+   * This is needed so that we can know whether it is appropriate to check if metadata
+   * exists (because it's being checked after restore), or if we can't because we haven't
+   * even loaded anything yet
    */
-  RestartableDataValue & registerRestartableData(const std::string & name,
-                                                 std::unique_ptr<RestartableDataValue> data,
-                                                 THREAD_ID tid,
-                                                 bool read_only,
-                                                 const RestartableDataMapName & metaname = "");
+  bool hasRestoredRestartableData(const RestartableDataMapName & metaname = "") const;
+
+  /**
+   * @return The meta data value with the name \p name in the map \p metaname, if any
+   */
+  const RestartableDataValue *
+  queryRestartableMetaData(const std::string & name, const RestartableDataMapName & metaname) const;
 
   /*
    * Check if a restartable meta data exists or not.
@@ -645,32 +652,90 @@ public:
                                                 THREAD_ID tid);
 
   /**
-   * Loads the restartable meta data for \p name if it is available with the folder base \p
-   * folder_base
+   * Loads the restartable meta data for \p name from a checkpoint/mesh only folder base if it is
+   * available
+   *
+   * @param name The restartable data map name
+   * @param checkpoint_folder_base The base folder for the checkpoint/mesh only output
+   * @param retain_reader Whether or not to retain the reader so that data can be read later
+   *
+   * If \p retain_reader == true, you may clear the reader with finalizeRestartableMetaData()
    */
-  void possiblyLoadRestartableMetaData(const RestartableDataMapName & name,
-                                       const std::filesystem::path & folder_base);
-  /**
-   * Loads all available restartable meta data if it is available with the folder base \p
-   * folder_base
-   */
-  void loadRestartableMetaData(const std::filesystem::path & folder_base);
+  void possiblyLoadCheckpointMetaData(const RestartableDataMapName & name,
+                                      const std::filesystem::path & checkpoint_folder_base,
+                                      const bool retain_reader);
 
   /**
-   * Writes the restartable meta data for \p name with a folder base of \p folder_base
+   * Loads the restartable meta data the given map
    *
-   * @return The files that were written
+   * @param name The restartable data map name
+   * @param folder The folder that contains the data; this is the _exact_ folder (the one that
+   * contains the header and data)
+   * @param retain_reader Whether or not to reain the reader so that data can be read later
+   *
+   * If \p retain_reader == true, you may clear the reader with finalizeRestartableMetaData()
    */
-  std::vector<std::filesystem::path>
-  writeRestartableMetaData(const RestartableDataMapName & name,
-                           const std::filesystem::path & folder_base);
+  void loadRestartableMetaData(const RestartableDataMapName & name,
+                               const std::filesystem::path & folder,
+                               const bool retain_reader);
+
   /**
-   * Writes all available restartable meta data with a file base of \p file_base
+   * Loads all available restartable meta data from a checkpoint/mesh only output
    *
+   * @param name checkpoint_folder_base The base folder for the checkpoint/mesh only output
+   *
+   * This will keep the RestartableDataReader for each map alive so that data from this
+   * restore can still be loaded later. To clear the reader, use finalizeRestartableMetaData().
+   */
+  void loadCheckpointMetaData(const std::filesystem::path & checkpoint_folder_base);
+
+  /**
+   * Finalizes (closes) the restoration process done in possiblyLoadRestartableMetaData().
+   *
+   * This releases access to the streams in which the restores were loaded from and
+   * makes it no longer possible to restore additional data.
+   */
+  void finalizeRestartableMetaData();
+
+  /**
+   * Writes restartable meta data
+   *
+   * Does not append to \p folder, unlike writeCheckpointMetaData(). That is, this shouldn't
+   * be used outside of the framework for saving data that is to be stored with the standard
+   * restart/restore capability. You can still use this, you should just be loading your data with
+   * loadRestartableMetaData().
+   *
+   * @param name The restartable data map name
+   * @param folder The folder to write to; i.e., where 'header' and 'data' will go
+   * @return The files that were written
+   */
+  std::vector<std::filesystem::path> writeRestartableMetaData(const RestartableDataMapName & name,
+                                                              const std::filesystem::path & folder);
+
+  /**
+   * Writes restartable meta data for checkpoint/mesh only
+   *
+   * This will append the necessary suffix to the folder base in order to work with
+   * the standard restore capability
+   *
+   * @param name The restartable data map name
+   * @param checkpoint_folder_base The base folder for the checkpoint/mesh only output
    * @return The files that were written
    */
   std::vector<std::filesystem::path>
-  writeRestartableMetaData(const std::filesystem::path & folder_base);
+  writeCheckpointMetaData(const RestartableDataMapName & name,
+                          const std::filesystem::path & checkpoint_folder_base);
+  /**
+   * Writes all available restartable meta data for checkpoint/mesh only
+   *
+   * This will append the necessary suffix to the folder base in order to work with
+   * the standard restore capability
+   *
+   * @param checkpoint_folder_base The base folder for the checkpoint/mesh only output
+   * @return The files that were written
+   */
+  std::vector<std::filesystem::path>
+  writeCheckpointMetaData(const std::filesystem::path & checkpoint_folder_base);
 
   /**
    * Return reference to the restartable data object
@@ -682,14 +747,13 @@ public:
   ///@}
 
   /**
-   * Return a reference to restartable data for the specific type flag.
+   * @return The read-only restartable data map with the given conditions
+   *
+   * @param name The metadata name (if any; if empty, the standard restartable data)
+   * @param tid The thread id
    */
-  RestartableDataMap & getRestartableDataMap(const RestartableDataMapName & name);
-
-  /**
-   * @return Whether or not the restartable data has the given name registered.
-   */
-  bool hasRestartableDataMap(const RestartableDataMapName & name) const;
+  const RestartableDataMap * queryRestartableDataMap(const RestartableDataMapName & meta_name = "",
+                                                     const THREAD_ID tid = 0) const;
 
   /**
    * Reserve a location for storing custom RestartableDataMap objects.
@@ -697,21 +761,33 @@ public:
    * This should be called in the constructor of an application.
    *
    * @param name A key to use for accessing the data object
-   * @param suffix The suffix to use when appending to checkpoint output, if not supplied the
-   *               given name is used to generate the suffix (MyMetaData -> _mymetadata)
+   * @param auto_load Whether or not to auto load this map in loadCheckpointMetaData
    */
-  void registerRestartableDataMapName(const RestartableDataMapName & name, std::string suffix = "");
+  void registerRestartableDataMap(const RestartableDataMapName & name, const bool auto_load = true);
 
   /**
-   * @return The output name for the restartable data with name \p name
+   * @return Whether or not the restartable data map with name \p name is registered
    */
-  const std::string & getRestartableDataMapName(const RestartableDataMapName & name) const;
+  bool hasRestartableDataMap(const RestartableDataMapName & name) const;
+
+  /**
+   * @return The input/output name for the restartable data with name \p name
+   */
+  std::string getRestartableDataMapIOSuffix(const RestartableDataMapName & name) const;
 
   /**
    * Return a reference to the recoverable data object
    * @return A const reference to the recoverable data
    */
   const DataNames & getRecoverableData() const { return _recoverable_data_names; }
+
+  /**
+   * Gets the late restatable data restorer for meta name \p metaname (if any)
+   *
+   * This is used to load restartable data after the initial restore
+   */
+  LateRestartableDataRestorer &
+  getLateRestartableDataRestorer(const RestartableDataMapName & metaname = "");
 
   /**
    * Backs up the application to the folder \p folder_base
@@ -930,9 +1006,10 @@ public:
 
   /// The file suffix for the checkpoint mesh
   static const std::string & checkpointSuffix();
-  /// The file suffix for meta data (header and data)
-  static std::filesystem::path metaDataFolderBase(const std::filesystem::path & folder_base,
-                                                  const std::string & map_suffix);
+  /// The file suffix for checkpoint meta data (header and data)
+  static std::filesystem::path
+  checkpointMetaDataFolderBase(const std::filesystem::path & folder_base,
+                               const std::string & map_suffix);
   /// The file suffix for restartable data
   std::filesystem::path restartFolderBase(const std::filesystem::path & folder_base) const;
 
@@ -1011,17 +1088,6 @@ public:
    * Function to check the integrity of the restartable meta data structure
    */
   void checkMetaDataIntegrity() const;
-
-  ///@{
-  /**
-   * Iterator based access to the extra RestartableDataMap objects; see Checkpoint.C for use case.
-   *
-   * These are MOOSE internal functions and should not be used otherwise.
-   */
-  auto getRestartableDataMapBegin() { return _restartable_meta_data.begin(); }
-
-  auto getRestartableDataMapEnd() { return _restartable_meta_data.end(); }
-  ///@}
 
   /**
    * Whether this application should by default error on Jacobian nonzero reallocations. The
@@ -1384,9 +1450,35 @@ private:
    */
   bool runInputs() const;
 
+  /**
+   * @return The restartable data map for the meta data name \p name
+   */
+  RestartableDataMap & getRestartableDataMap(const RestartableDataMapName & name);
+
+  /**
+   * @return The restartable data map with the given conditions
+   *
+   * @param name The metadata name (if any; if empty, the standard restartable data)
+   * @param tid The thread id
+   */
+  RestartableDataMap * queryRestartableDataMap(const RestartableDataMapName & name = "",
+                                               const THREAD_ID tid = 0);
+
+  /**
+   * Struct for storing meta data
+   */
+  struct MetaDataEntry
+  {
+    /// The map that stores the data
+    RestartableDataMap map;
+    /// The reader, used to load data later if needed
+    std::unique_ptr<RestartableDataReader> reader;
+    /// Whether or not to automatically load this data
+    bool auto_load;
+  };
+
   /// General storage for custom RestartableData that can be added to from outside applications
-  std::unordered_map<RestartableDataMapName, std::pair<RestartableDataMap, std::string>>
-      _restartable_meta_data;
+  std::unordered_map<RestartableDataMapName, MetaDataEntry> _restartable_meta_data;
 
   /// Enumeration for holding the valid types of dynamic registrations allowed
   enum RegistrationType

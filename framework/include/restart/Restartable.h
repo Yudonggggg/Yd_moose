@@ -139,6 +139,43 @@ protected:
                                                            Args &&... args);
 
   /**
+   * @return Whether or not restartable data is had for the system with name \p system_name,
+   * the restartable name \p restartable_name, and the data name \p data_name of type \p type
+   *
+   * This should only be called during the setup phase (not construction), as the restartable
+   * data has not been loaded early in construction. It should be used alongside getRestartableData
+   * at the same time.
+   */
+  bool hasRestartableData(const std::string & system_name,
+                          const std::string & restartable_name,
+                          const std::string & data_name,
+                          const std::type_info & type) const;
+
+  /**
+   * @return Whether or not restartable data is had for the system with name \p system_name,
+   * the restartable name \p restartable_name, and the data name \p data_name with the given type
+   *
+   * This should only be called during the setup phase (not construction), as the restartable
+   * data has not been loaded early in construction. It should be used alongside getRestartableData
+   * at the same time.
+   */
+  template <typename T>
+  bool hasRestartableData(const std::string & system_name,
+                          const std::string & restartable_name,
+                          const std::string & data_name) const;
+
+  /**
+   * @return Whether or not this object has restartable data with name \p data_name and the
+   * given type
+   *
+   * This should only be called during the setup phase (not construction), as the restartable
+   * data has not been loaded early in construction. It should be used alongside getRestartableData
+   * at the same time.
+   */
+  template <typename T>
+  bool hasRestartableData(const std::string & data_name) const;
+
+  /**
    * Declare a piece of data as "restartable" and initialize it
    * Similar to `declareRestartableData` but returns a const reference to the object.
    * Forwarded arguments are not allowed in this case because we assume that the
@@ -148,8 +185,8 @@ protected:
    *
    * @param data_name The name of the data (usually just use the same name as the member variable)
    */
-  template <typename T, typename... Args>
-  const T & getRestartableData(const std::string & data_name) const;
+  template <typename T>
+  const T & getRestartableData(const std::string & data_name);
 
   /**
    * Declare a piece of data as "restartable" and initialize it.
@@ -182,44 +219,23 @@ protected:
   T & declareRecoverableData(const std::string & data_name, Args &&... args);
 
   /**
-   * Declare a piece of data as "restartable".
-   * This means that in the event of a restart this piece of data
-   * will be restored back to its previous value.
-   *
-   * NOTE: This returns a _reference_!  Make sure you store it in a _reference_!
-   *
-   * @param data_name The name of the data (usually just use the same name as the member variable)
-   * @param object_name A supplied name for the object that is declaring this data.
-   * @param args Arguments to forward to the constructor of the data
+   * @return The name of restartable data for the system with name \p system_name,
+   * the \p object with name restartable_name, and the data with name \p data_name.
    */
-  template <typename T, typename... Args>
-  T & declareRestartableDataWithObjectName(const std::string & data_name,
-                                           const std::string & object_name,
-                                           Args &&... args);
+  static std::string restartableName(const std::string & system_name,
+                                     const std::string & restartable_name,
+                                     const std::string & data_name);
 
   /**
-   * Declare a piece of data as "restartable".
-   * This means that in the event of a restart this piece of data
-   * will be restored back to its previous value.
-   *
-   * NOTE: This returns a _reference_!  Make sure you store it in a _reference_!
-   *
-   * @param data_name The name of the data (usually just use the same name as the member variable)
-   * @param object_name A supplied name for the object that is declaring this data.
-   * @param context Context pointer that will be passed to the load and store functions
-   * @param args Arguments to forward to the constructor of the data
+   * @return The name of restartable data for the system that this object belongs to,
+   * the \p object with name restartable_name, and the data with name \p data_name.
    */
-  template <typename T, typename... Args>
-  T & declareRestartableDataWithObjectNameWithContext(const std::string & data_name,
-                                                      const std::string & object_name,
-                                                      void * context,
-                                                      Args &&... args);
+  std::string restartableName(const std::string & restartable_name,
+                              const std::string & data_name) const;
 
   /**
-   * Gets the name of a piece of restartable data given a data name, adding
-   * the system name and object name prefix.
-   *
-   * This should only be used in this interface and in testing.
+   * @return The name of restartable data for the system that this object belongs to,
+   * this object, and the data with name \p data_name.
    */
   std::string restartableName(const std::string & data_name) const;
 
@@ -254,14 +270,44 @@ private:
    * Helper function for declaring restartable data. We use this function to reduce code duplication
    * when returning const/nonconst references to the data.
    *
-   * @param data_name The name of the data (usually just use the same name as the member variable)
+   * @param full_name The full name of the data
    * @param context Context pointer that will be passed to the load and store functions
    * @param args Arguments to forward to the constructor of the data
    */
   template <typename T, typename... Args>
-  RestartableData<T> & declareRestartableDataHelper(const std::string & data_name,
+  RestartableData<T> & declareRestartableDataHelper(const std::string & full_name,
                                                     void * context,
                                                     Args &&... args) const;
+
+  /**
+   * Helper class for designating whether or not data exists in a loaded state, exists
+   * in a restorable state, or does not exist at all
+   */
+  enum class HasRestartableData
+  {
+    HAS_DATA_LOADED,
+    HAS_DATA_RESTORABLE,
+    MISSING_DATA,
+    NOT_RESTORED
+  };
+
+  /**
+   * @return Whether or not (and how) the restartable data with full name \p full_name
+   * of type \p type exists
+   */
+  HasRestartableData hasRestartableData(const std::string & full_name,
+                                        const std::type_info & type) const;
+
+  /**
+   * Internal helper for getting the restartable data with the full name \p full_name
+   */
+  template <typename T>
+  const T & getRestartableDataInternal(const std::string & full_name);
+
+  /**
+   * Internal helper for restoring the value with the full name \p full_name late
+   */
+  void restoreLateValue(const std::string & full_name);
 };
 
 template <typename T, typename... Args>
@@ -277,16 +323,34 @@ Restartable::declareManagedRestartableDataWithContext(const std::string & data_n
                                                       void * context,
                                                       Args &&... args)
 {
-  auto & data_ptr =
-      declareRestartableDataHelper<T>(data_name, context, std::forward<Args>(args)...);
+  auto & data_ptr = declareRestartableDataHelper<T>(
+      restartableName(data_name), context, std::forward<Args>(args)...);
   return Restartable::ManagedValue<T>(data_ptr);
 }
 
-template <typename T, typename... Args>
-const T &
-Restartable::getRestartableData(const std::string & data_name) const
+template <typename T>
+bool
+Restartable::hasRestartableData(const std::string & system_name,
+                                const std::string & restartable_name,
+                                const std::string & data_name) const
 {
-  return declareRestartableDataHelper<T>(data_name, nullptr).get();
+  return hasRestartableData(system_name, restartable_name, data_name, typeid(T));
+}
+
+template <typename T>
+bool
+Restartable::hasRestartableData(const std::string & data_name) const
+{
+  const auto has = hasRestartableData(restartableName(data_name), typeid(T));
+  return has == HasRestartableData::HAS_DATA_LOADED ||
+         has == HasRestartableData::HAS_DATA_RESTORABLE;
+}
+
+template <typename T>
+const T &
+Restartable::getRestartableData(const std::string & data_name)
+{
+  return getRestartableDataInternal<T>(restartableName(data_name));
 }
 
 template <typename T, typename... Args>
@@ -295,17 +359,17 @@ Restartable::declareRestartableDataWithContext(const std::string & data_name,
                                                void * context,
                                                Args &&... args)
 {
-  return declareRestartableDataHelper<T>(data_name, context, std::forward<Args>(args)...).set();
+  return declareRestartableDataHelper<T>(
+             restartableName(data_name), context, std::forward<Args>(args)...)
+      .set();
 }
 
 template <typename T, typename... Args>
 RestartableData<T> &
-Restartable::declareRestartableDataHelper(const std::string & data_name,
+Restartable::declareRestartableDataHelper(const std::string & full_name,
                                           void * context,
                                           Args &&... args) const
 {
-  const auto full_name = restartableName(data_name);
-
   // Here we will create the RestartableData even though we may not use this instance.
   // If it's already in use, the App will return a reference to the existing instance and we'll
   // return that one instead. We might refactor this to have the app create the RestartableData
@@ -320,34 +384,6 @@ Restartable::declareRestartableDataHelper(const std::string & data_name,
 
 template <typename T, typename... Args>
 T &
-Restartable::declareRestartableDataWithObjectName(const std::string & data_name,
-                                                  const std::string & object_name,
-                                                  Args &&... args)
-{
-  return declareRestartableDataWithObjectNameWithContext<T>(
-      data_name, object_name, nullptr, std::forward<Args>(args)...);
-}
-
-template <typename T, typename... Args>
-T &
-Restartable::declareRestartableDataWithObjectNameWithContext(const std::string & data_name,
-                                                             const std::string & object_name,
-                                                             void * context,
-                                                             Args &&... args)
-{
-  std::string old_name = _restartable_name;
-
-  _restartable_name = object_name;
-
-  T & value = declareRestartableDataWithContext<T>(data_name, context, std::forward<Args>(args)...);
-
-  _restartable_name = old_name;
-
-  return value;
-}
-
-template <typename T, typename... Args>
-T &
 Restartable::declareRecoverableData(const std::string & data_name, Args &&... args)
 {
   const auto full_name = restartableName(data_name);
@@ -355,4 +391,24 @@ Restartable::declareRecoverableData(const std::string & data_name, Args &&... ar
   registerRestartableNameWithFilterOnApp(full_name, Moose::RESTARTABLE_FILTER::RECOVERABLE);
 
   return declareRestartableDataWithContext<T>(data_name, nullptr, std::forward<Args>(args)...);
+}
+
+template <typename T>
+const T &
+Restartable::getRestartableDataInternal(const std::string & full_name)
+{
+  const auto has_data = hasRestartableData(full_name, typeid(T));
+
+  if (has_data == HasRestartableData::MISSING_DATA)
+    mooseError("Failed to find restartable data '",
+               full_name,
+               "'",
+               _metaname.size() ? (" in '" + _metaname + "'") : "");
+
+  const auto & value = declareRestartableDataHelper<T>(full_name, nullptr);
+
+  if (has_data == HasRestartableData::HAS_DATA_RESTORABLE)
+    restoreLateValue(full_name);
+
+  return value.get();
 }

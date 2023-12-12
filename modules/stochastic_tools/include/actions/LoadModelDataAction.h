@@ -11,7 +11,7 @@
 
 #include "Action.h"
 #include "Attributes.h"
-#include "RestartableDataReader.h"
+#include "MooseApp.h"
 #include "RestartableModelInterface.h"
 
 /**
@@ -65,19 +65,14 @@ template <typename T>
 void
 LoadModelDataAction<T>::load(const T & object)
 {
-  // Create the object that will load in data
-  RestartableDataReader reader(_app, _app.getRestartableDataMap(object.modelMetaDataName()));
-  reader.setErrorOnLoadWithDifferentNumberOfProcessors(false);
-
   // Read the supplied file
-  const std::string filename = object.getModelDataFileName();
+  const std::string folder = object.getModelDataFileName();
   try
   {
-    reader.setInput(filename);
-    reader.restore();
+    object.getMooseApp().loadRestartableMetaData(object.modelMetaDataName(), folder, false);
   }
   catch (...)
   {
-    paramError("filename", "The supplied file '", filename, "' failed to load.");
+    paramError("filename", "The supplied restart folder '", folder, "' failed to load.");
   }
 }
