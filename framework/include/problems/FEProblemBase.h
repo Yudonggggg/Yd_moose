@@ -213,24 +213,6 @@ public:
   std::vector<std::pair<MooseVariableFEBase *, MooseVariableFEBase *>> &
   nonlocalCouplingEntries(const THREAD_ID tid, const unsigned int nl_sys_num);
 
-  /// Perform steps required before checking nonlinear convergence
-  virtual void nonlinearConvergenceSetup() {}
-
-  /**
-   * Check the relative convergence of the nonlinear solution
-   * @param fnorm          Norm of the residual vector
-   * @param the_residual   The residual to check
-   * @param rtol           Relative tolerance
-   * @param abstol         Absolute tolerance
-   * @return               Bool signifying convergence
-   */
-  virtual bool checkRelativeConvergence(const PetscInt it,
-                                        const Real fnorm,
-                                        const Real the_residual,
-                                        const Real rtol,
-                                        const Real abstol,
-                                        std::ostringstream & oss);
-
   virtual bool hasVariable(const std::string & var_name) const override;
   using SubProblem::getVariable;
   virtual const MooseVariableFieldBase &
@@ -637,14 +619,10 @@ public:
   MeshDivision & getMeshDivision(const std::string & name, const THREAD_ID tid = 0) const;
 
   virtual void
-  addConvergence(const std::string & type, const std::string & name,
-                      InputParameters & parameters);
-  virtual Convergence & getConvergence(const std::string & name, const THREAD_ID tid = 0);
-  virtual bool hasConvergence(const std::string & name, const THREAD_ID tid=0);
-
-  /// Nonlinear convergence name
-  ConvergenceName _nonlinear_convergence_name;
-
+  addConvergence(const std::string & type, const std::string & name, InputParameters & parameters);
+  virtual Convergence & getConvergence(const std::string & name, const THREAD_ID tid = 0) const;
+  virtual bool hasConvergence(const std::string & name, const THREAD_ID tid = 0) const;
+  virtual void addDefaultConvergence();
   /**
    * add a MOOSE line search
    */
@@ -2139,6 +2117,8 @@ public:
     _n_max_nl_pingpong = n_max_nl_pingpong;
   }
 
+  unsigned int getMaxNLPingPong() { return _n_max_nl_pingpong; }
+
   /// method setting the minimum number of nonlinear iterations before performing divergence checks
   void setNonlinearForcedIterations(const unsigned int nl_forced_its)
   {
@@ -2166,6 +2146,7 @@ public:
     _set_nonlinear_convergence_name = true;
   }
 
+  ConvergenceName getActiveConvergenceName() const { return _nonlinear_convergence_name; }
   /**
    * Setter for whether we're computing the scaling jacobian
    */
@@ -2236,6 +2217,10 @@ public:
    */
   void setFailNextNonlinearConvergenceCheck() { _fail_next_nonlinear_convergence_check = true; }
 
+  /**
+   * Do not skip further residual evaluations and fail the next nonlinear convergence check
+   */
+  void resetFailNextNonlinearConvergenceCheck() { _fail_next_nonlinear_convergence_check = false; }
   /*
    * Set the status of loop order of execution printing
    * @param print_exec set of execution flags to print on
@@ -2297,12 +2282,6 @@ public:
    */
   bool identifyVariableGroupsInNL() const { return _identify_variable_groups_in_nl; }
 
-  /// Nonlinear convergence name
-  ConvergenceName _nonlinear_convergence_name;
-  /// Flag that the nonlinear convergence name has been set
-  bool _set_nonlinear_convergence_name;
-
-
   virtual void setCurrentLowerDElem(const Elem * const lower_d_elem, const THREAD_ID tid) override;
   virtual void setCurrentBoundaryID(BoundaryID bid, const THREAD_ID tid) override;
 
@@ -2327,6 +2306,9 @@ private:
 protected:
   bool _initialized;
 
+  /// Nonlinear convergence name
+  ConvergenceName _nonlinear_convergence_name;
+
   std::set<TagID> _fe_vector_tags;
 
   std::set<TagID> _fe_matrix_tags;
@@ -2349,7 +2331,7 @@ protected:
 
   /// Flag that the nonlinear convergence name has been set
   bool _set_nonlinear_convergence_name;
-  
+  bool _set_reference_convergence_name = false;
 
   /// maximum number
   unsigned int _n_nl_pingpong = 0;
@@ -2427,7 +2409,7 @@ protected:
   /// functions
   MooseObjectWarehouse<Function> _functions;
 
-  //convergence
+  // convergence
   MooseObjectWarehouse<Convergence> _convergences;
 
   /// nonlocal kernels

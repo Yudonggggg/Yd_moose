@@ -10,6 +10,11 @@
 #pragma once
 
 #include "Convergence.h"
+#include "PerfGraphInterface.h"
+
+// PETSc includes
+#include <petsc.h>
+#include <petscmat.h>
 
 class ResidualConvergence : public Convergence
 {
@@ -18,28 +23,34 @@ public:
 
   ResidualConvergence(const InputParameters & parameters);
 
-  static InputParameters commonParams();
-
-  Convergence::MooseAlgebraicConvergence checkAlgebraicConvergence(int it,
-                        Real xnorm,
-                        Real snorm,
-                        Real fnorm) override;
+  Convergence::MooseAlgebraicConvergence
+  checkAlgebraicConvergence(int it, Real xnorm, Real snorm, Real fnorm) override;
 
 protected:
+  /**
+   * Check the relative convergence of the nonlinear solution
+   * @param fnorm          Norm of the residual vector
+   * @param the_residual   The residual to check
+   * @param rtol           Relative tolerance
+   * @param abstol         Absolute tolerance
+   * @return               Bool signifying convergence
+   */
+  virtual bool checkRelativeConvergence(const PetscInt it,
+                                        const Real fnorm,
+                                        const Real the_residual,
+                                        const Real rtol,
+                                        const Real abstol,
+                                        std::ostringstream & oss);
 
   FEProblemBase & _fe_problem;
 
-  bool _initialized;
-
-  long int _nl_forced_its = 0;// the number of forced nonlinear iterations
-  long int _nfuncs = 0;
   // Variables for the convergence criteria
   Real _atol; // absolute convergence tolerance
   Real _rtol; // relative convergence tolerance
   Real _stol; // convergence (step) tolerance in terms of the norm of the change in the
               // solution between steps
-    
-  Real _div_threshold = std::numeric_limits<Real>::max();      
+
+  Real _div_threshold = std::numeric_limits<Real>::max();
   /// the absolute non linear divergence tolerance
   Real _nl_abs_div_tol = -1;
   Real _divtol; // relative divergence tolerance
@@ -48,20 +59,22 @@ protected:
   Real _nl_abs_tol;
   Real _nl_rel_step_tol;
   Real _nl_abs_step_tol;
-  
-  long int _nl_max_its;
-  long int _nl_max_funcs;
 
-  long int _maxit;  // maximum number of iterations
-  long int _maxf;   // maximum number of function evaluations
+  int _nl_forced_its = 0; // the number of forced nonlinear iterations
+  PetscInt _nfuncs = 0;
 
-  //Linear solver convergence criteria
+  unsigned int _nl_max_its;
+  unsigned int _nl_max_funcs;
+
+  PetscInt _maxit; // maximum number of iterations
+  PetscInt _maxf;  // maximum number of function evaluations
+
+  // Linear solver convergence criteria
   Real _l_tol;
   Real _l_abs_tol;
-  long int _l_max_its;
+  unsigned int _l_max_its;
 
   /// maximum number of ping-pong iterations
   unsigned int _n_nl_pingpong = 0;
   unsigned int _n_max_nl_pingpong = std::numeric_limits<unsigned int>::max();
-
 };

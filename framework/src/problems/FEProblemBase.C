@@ -734,6 +734,9 @@ FEProblemBase::initialSetup()
 {
   TIME_SECTION("initialSetup", 2, "Performing Initial Setup");
 
+  if (!_nonlinear_convergence_name.empty())
+    getConvergence(_nonlinear_convergence_name).initialSetup();
+
   SubProblem::initialSetup();
 
   if (_app.isRecovering() + _app.isRestarting() + bool(_app.getExReaderForRestart()) > 1)
@@ -952,13 +955,16 @@ FEProblemBase::initialSetup()
     computeUserObjects(EXEC_INITIAL, Moose::PRE_IC);
 
     {
-      TIME_SECTION("ICiniitalSetup", 5, "Setting Up Initial Conditions");
+      TIME_SECTION("ICinitalSetup", 5, "Setting Up Initial Conditions");
 
       for (THREAD_ID tid = 0; tid < n_threads; tid++)
         _ics.initialSetup(tid);
 
       _scalar_ics.initialSetup();
     }
+
+    // if (!_nonlinear_convergence_name.empty())
+    // getConvergence(_nonlinear_convergence_name).initialSetup();
 
     projectSolution();
   }
@@ -2304,19 +2310,29 @@ FEProblemBase::addFunction(const std::string & type,
   }
 }
 
-
 void
 FEProblemBase::addConvergence(const std::string & type,
-                           const std::string & name,
-                           InputParameters & parameters)
+                              const std::string & name,
+                              InputParameters & parameters)
 {
-  //parallel_object_only();
-
+  // parallel_object_only();
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); tid++)
   {
-    std::shared_ptr<Convergence> func = _factory.create<Convergence>(type, name, parameters, tid);
-    _convergences.addObject(func, tid);
+    std::shared_ptr<Convergence> conv = _factory.create<Convergence>(type, name, parameters, tid);
+    _convergences.addObject(conv, tid);
   }
+  _set_nonlinear_convergence_name = true;
+}
+
+void
+FEProblemBase::addDefaultConvergence()
+{
+  // parallel_object_only();
+  const std::string class_name = "ResidualConvergence";
+  InputParameters params = _factory.getValidParams(class_name);
+  params.applyParameters(parameters());
+  // setNonlinearConvergenceObject(_nonlinear_convergence_name);
+  addConvergence(class_name, _nonlinear_convergence_name, params);
 }
 
 bool
@@ -2370,29 +2386,18 @@ FEProblemBase::getFunction(const std::string & name, const THREAD_ID tid)
   return *ret;
 }
 
-
 bool
-FEProblemBase::hasConvergence(const std::string & name, const THREAD_ID tid)
+FEProblemBase::hasConvergence(const std::string & name, const THREAD_ID tid) const
 {
   return _convergences.hasActiveObject(name, tid);
 }
 
 Convergence &
-FEProblemBase::getConvergence(const std::string & name, const THREAD_ID tid)
+FEProblemBase::getConvergence(const std::string & name, const THREAD_ID tid) const
 {
   // This thread lock is necessary since this method will create functions
   // for all threads if one is missing.
-  //Threads::spin_mutex::scoped_lock lock(get_function_mutex);
-
-  if (!hasConvergence(name, tid))
-  {
-    //mooseError("Unable to find convergence criteria " + name);
-    std::string class_name = "ResidualConvergence";
-    InputParameters params = _factory.getValidParams(class_name);
-    setNonlinearConvergenceObject("default");
-    addConvergence(class_name,_nonlinear_convergence_name, params);
-  }
-
+  // Threads::spin_mutex::scoped_lock lock(get_function_mutex);
   auto * const ret = dynamic_cast<Convergence *>(_convergences.getActiveObject(name, tid).get());
   if (!ret)
     mooseError("No convergence criteria named ", name, " of appropriate type");
@@ -8059,24 +8064,6 @@ FEProblemBase::getVariableNames()
   names.insert(names.end(), aux_var_names.begin(), aux_var_names.end());
 
   return names;
-}
-
-bool
-FEProblemBase::checkRelativeConvergence(const PetscInt /*it*/,
-                                        const Real fnorm,
-                                        const Real ref_residual,
-                                        const Real rtol,
-                                        const Real /*abstol*/,
-                                        std::ostringstream & oss)
-{
-  if (_fail_next_nonlinear_convergence_check)
-    return false;
-  if (fnorm <= ref_residual * rtol)
-  {
-    oss << "Converged due to function norm " << fnorm << " < relative tolerance (" << rtol << ")\n";
-    return true;
-  }
-  return false;
 }
 
 SolverParams &
