@@ -80,23 +80,23 @@ KKSPhaseConcentrationMultiPhaseMaterial::KKSPhaseConcentrationMultiPhaseMaterial
     _nested_solve(NestedSolve(parameters))
 
 {
-  /// @{ phase concentrations
+  // @{ phase concentrations
   for (const auto m : make_range(_num_c * _num_j))
   {
     _ci_old[m] = &getMaterialPropertyOld<Real>(_ci_names[m]);
     _prop_ci[m] = &declareProperty<Real>(_ci_names[m]);
   }
-  /// @}
+  // @}
 
-  /// @{ free energies
+  // @{ free energies
   for (const auto m : make_range(_num_j))
   {
     _prop_Fi[m] = &getMaterialPropertyByName<Real>(_Fj_names[m]);
     _Fi_copy[m] = &declareProperty<Real>("cp" + _Fj_names[m]);
   }
-  /// @}
+  // @}
 
-  /// @{ free energy derivatives wrt phase concentrations
+  // @{ free energy derivatives wrt phase concentrations
   for (const auto m : make_range(_num_j))
   {
     _prop_hj[m] = &getMaterialPropertyByName<Real>(_hj_names[m]);
@@ -124,9 +124,9 @@ KKSPhaseConcentrationMultiPhaseMaterial::KKSPhaseConcentrationMultiPhaseMaterial
       }
     }
   }
-  /// @}
+  // @}
 
-  /// @{ derivative of free energies wrt coupled variables
+  // @{ derivative of free energies wrt coupled variables
   for (const auto m : make_range(_num_j))
   {
     _dFidarg[m].resize(_n_args);
@@ -138,9 +138,9 @@ KKSPhaseConcentrationMultiPhaseMaterial::KKSPhaseConcentrationMultiPhaseMaterial
       _dFidarg_copy[m][n] = &declarePropertyDerivative<Real>("cp" + _Fj_names[m], _args_names[n]);
     }
   }
-  /// @}
+  // @}
 
-  /// @{ second derivatives of F1 wrt c1 and other coupled variables
+  // @{ second derivatives of F1 wrt c1 and other coupled variables
   for (const auto m : make_range(_num_c))
   {
     _d2F1dc1darg[m].resize(_n_args);
@@ -154,7 +154,7 @@ KKSPhaseConcentrationMultiPhaseMaterial::KKSPhaseConcentrationMultiPhaseMaterial
           "cp" + _Fj_names[0], _ci_names[m * _num_j], _args_names[n]);
     }
   }
-  /// @}
+  // @}
 
   if (_damped_newton)
     _C = &getMaterialPropertyByName<Real>(_condition_name);
@@ -183,13 +183,13 @@ KKSPhaseConcentrationMultiPhaseMaterial::initialSetup()
 void
 KKSPhaseConcentrationMultiPhaseMaterial::computeQpProperties()
 {
-  /// parameters for nested Newton iteration
+  // parameters for nested Newton iteration
   NestedSolve::Value<> solution(_num_c * _num_j);
 
-  /// @{ initialize first guess using the solution from previous step
+  // @{ initialize first guess using the solution from previous step
   for (const auto m : make_range(_num_c * _num_j))
     solution(m) = (*_ci_old[m])[_qp];
-  /// @}
+  // @}
 
   _nested_solve.setAbsoluteTolerance(_abs_tol);
   _nested_solve.setRelativeTolerance(_rel_tol);
@@ -204,7 +204,7 @@ KKSPhaseConcentrationMultiPhaseMaterial::computeQpProperties()
     for (const auto m : make_range(_num_j))
       _Fj_mat[m]->computePropertiesAtQp(_qp);
 
-    /// @{ assign residual functions
+    // @{ assign residual functions
     for (const auto m : make_range(_num_c))
     {
       for (const auto n : make_range(_num_j - 1))
@@ -215,14 +215,14 @@ KKSPhaseConcentrationMultiPhaseMaterial::computeQpProperties()
       for (const auto l : make_range(_num_j))
         residual((m + 1) * _num_j - 1) += (*_prop_hj[l])[_qp] * (*_prop_ci[m * _num_j + l])[_qp];
     }
-    /// @}
+    // @}
 
     jacobian.setZero();
 
-    /// @{ fill in the non-zero terms in jacobian
+    // @{ fill in the non-zero terms in jacobian
     for (const auto m : make_range(_num_c))
     {
-      /// @{ equal chemical potential derivative equations
+      // @{ equal chemical potential derivative equations
       for (const auto n : make_range(_num_j - 1))
       {
         for (const auto l : make_range(_num_c))
@@ -231,14 +231,14 @@ KKSPhaseConcentrationMultiPhaseMaterial::computeQpProperties()
           jacobian(m * _num_j + n, n + l * _num_j + 1) = -(*_d2Fidcidbi[n + 1][m][l])[_qp];
         }
       }
-      /// @}
+      // @}
 
-      /// @{ concentration conservation derivative equations
+      // @{ concentration conservation derivative equations
       for (const auto n : make_range(_num_j))
         jacobian((m + 1) * _num_j - 1, m * _num_j + n) = (*_prop_hj[n])[_qp];
-      /// @}
+      // @}
     }
-    /// @}
+    // @}
   };
 
   auto computeCondition = [&](const NestedSolve::Value<> & guess) -> Real
@@ -249,24 +249,24 @@ KKSPhaseConcentrationMultiPhaseMaterial::computeQpProperties()
     return ((*_C)[_qp]);
   };
 
-  /// @{ choose between Newton or damped Newton's method
+  // @{ choose between Newton or damped Newton's method
   if (!_damped_newton)
     _nested_solve.nonlinear(solution, compute);
   else
     _nested_solve.nonlinearDamped(solution, compute, computeCondition);
-  /// @}
+  // @}
 
   _iter[_qp] = _nested_solve.getIterations();
 
   if (_nested_solve.getState() == NestedSolve::State::NOT_CONVERGED)
     mooseException("Nested Newton iteration did not converge.");
 
-  /// @{ assign solution to ci
+  // @{ assign solution to ci
   for (const auto m : make_range(_num_c * _num_j))
     (*_prop_ci[m])[_qp] = solution[m];
-  /// @}
+  // @}
 
-  /// @{ assign to the copied parameters to be used in kernels
+  // @{ assign to the copied parameters to be used in kernels
   for (const auto m : make_range(_num_j))
     (*_Fi_copy[m])[_qp] = (*_prop_Fi[m])[_qp];
 
@@ -292,5 +292,5 @@ KKSPhaseConcentrationMultiPhaseMaterial::computeQpProperties()
     for (const auto n : make_range(_n_args))
       (*_d2F1dc1darg_copy[m][n])[_qp] = (*_d2F1dc1darg[m][n])[_qp];
   }
-  /// @}
+  // @}
 }

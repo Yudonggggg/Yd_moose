@@ -46,15 +46,15 @@ NestedKKSMultiACBulkC::NestedKKSMultiACBulkC(const InputParameters & parameters)
 {
   for (unsigned int i = 0; i < _num_j; ++i)
   {
-    /// get order parameter names and variable indices
+    // get order parameter names and variable indices
     _eta_names[i] = getVar("all_etas", i)->name();
 
-    /// Set _k to the position of the nonlinear variable in the list of etaj's
+    // Set _k to the position of the nonlinear variable in the list of etaj's
     if (coupled("all_etas", i) == _var.number())
       _k = i;
   }
 
-  /// @{ initialize _ci_name_matrix and _prop_ci for easy reference
+  // @{ initialize _ci_name_matrix and _prop_ci for easy reference
   for (unsigned int m = 0; m < _num_c; ++m)
   {
     _ci_name_matrix[m].resize(_num_j);
@@ -66,9 +66,9 @@ NestedKKSMultiACBulkC::NestedKKSMultiACBulkC(const InputParameters & parameters)
       _prop_ci[m][n] = &getMaterialPropertyByName<Real>(_ci_name_matrix[m][n]);
     }
   }
-  /// @}
+  // @}
 
-  /// @{ _dcidetaj and _dcidb are computed in KKSPhaseConcentrationMultiPhaseDerivatives
+  // @{ _dcidetaj and _dcidb are computed in KKSPhaseConcentrationMultiPhaseDerivatives
   for (const auto m : make_range(_num_c))
   {
     _dcidetaj[m].resize(_num_j);
@@ -88,7 +88,7 @@ NestedKKSMultiACBulkC::NestedKKSMultiACBulkC(const InputParameters & parameters)
             &getMaterialPropertyDerivative<Real>(_ci_names[n + m * _num_j], _c_names[l]);
     }
   }
-  /// @}
+  // @}
 
   for (const auto m : make_range(_num_j))
   {
@@ -177,12 +177,12 @@ NestedKKSMultiACBulkC::computeDFDOP(PFFunctionType type)
 Real
 NestedKKSMultiACBulkC::computeQpOffDiagJacobian(unsigned int jvar)
 {
-  /// first get dependence of mobility _L on other variables using parent class member function Real
+  // first get dependence of mobility _L on other variables using parent class member function Real
   Real res = ACBulk<Real>::computeQpOffDiagJacobian(jvar);
 
   Real sum = 0.0;
 
-  /// @{ Then add dependence of KKSACBulkF on other variables if other cs are the coupled variables
+  // @{ Then add dependence of KKSACBulkF on other variables if other cs are the coupled variables
   auto compvar = mapJvarToCvar(jvar, _c_map);
   if (compvar >= 0)
   {
@@ -208,9 +208,9 @@ NestedKKSMultiACBulkC::computeQpOffDiagJacobian(unsigned int jvar)
 
     return res;
   }
-  /// @}
+  // @}
 
-  /// @{ if order parameters are the coupled variables
+  // @{ if order parameters are the coupled variables
   auto etavar = mapJvarToCvar(jvar, _eta_map);
   if (etavar >= 0)
   {
@@ -236,9 +236,9 @@ NestedKKSMultiACBulkC::computeQpOffDiagJacobian(unsigned int jvar)
 
     res += -_L[_qp] * sum * _phi[_j][_qp] * _test[_i][_qp];
   }
-  /// @}
+  // @}
 
-  /// @{ for all other vars get the coupled variable jvar is referring to
+  // @{ for all other vars get the coupled variable jvar is referring to
   const unsigned int cvar = mapJvarToCvar(jvar);
   for (unsigned int m = 0; m < _num_c; ++m)
   {
@@ -249,6 +249,6 @@ NestedKKSMultiACBulkC::computeQpOffDiagJacobian(unsigned int jvar)
 
     res += -_L[_qp] * sum1 * _phi[_j][_qp] * _test[_i][_qp];
   }
-  /// @}
+  // @}
   return res;
 }

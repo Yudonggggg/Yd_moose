@@ -29,49 +29,49 @@ protected:
   virtual Real computeDFDOP(PFFunctionType type);
   virtual Real computeQpOffDiagJacobian(unsigned int jvar);
 
-  /// @{ Global concentrations
+  // @{ Global concentrations
   std::vector<VariableName> _c_names;
   const JvarMap & _c_map;
-  /// @}
+  // @}
 
-  /// Number of global concentrations
+  // Number of global concentrations
   unsigned int _num_c;
 
-  /// @{ Phase parameters
+  // @{ Phase parameters
   std::vector<VariableName> _eta_names;
   const JvarMap & _eta_map;
-  /// @}
+  // @}
 
-  /// Position of the nonlinear variable in the list of cj's
+  // Position of the nonlinear variable in the list of cj's
   int _k;
 
-  /// Phase concentrations`
+  // Phase concentrations`
   std::vector<MaterialPropertyName> _ci_names;
 
-  /// Derivative of phase concentrations wrt etaj \f$ \frac d{d{eta_j}} c_i \f$
+  // Derivative of phase concentrations wrt etaj \f$ \frac d{d{eta_j}} c_i \f$
   std::vector<std::vector<std::vector<const MaterialProperty<Real> *>>> _dcidetaj;
 
-  /// Derivative of phase concentrations wrt global concentrations \f$ \frac d{db} c_i \f$
+  // Derivative of phase concentrations wrt global concentrations \f$ \frac d{db} c_i \f$
   std::vector<std::vector<std::vector<const MaterialProperty<Real> *>>> _dcidb;
 
-  /// double well height parameter
+  // double well height parameter
   Real _wi;
 
-  /// Barrier functions
+  // Barrier functions
   MaterialPropertyName _gi_name;
 
-  /// Derivatives of barrier function
+  // Derivatives of barrier function
   const MaterialProperty<Real> & _dgi;
 
-  /// Second derivative of barrier function
+  // Second derivative of barrier function
   const MaterialProperty<Real> & _d2gi;
 
-  /// Second derivative of switching function \f$ \frac {d^2}{deta_i deta_p} h_j \f$
+  // Second derivative of switching function \f$ \frac {d^2}{deta_i deta_p} h_j \f$
   std::vector<std::vector<const MaterialProperty<Real> *>> _d2hjdetaidetap;
 
-  /// Derivative of the free energy function \f$ \frac d{dc_1} F_1 \f$
+  // Derivative of the free energy function \f$ \frac d{dc_1} F_1 \f$
   std::vector<const MaterialProperty<Real> *> _dF1dc1;
 
-  /// Derivative of the free energy function \f$ \frac d{dq} F_i \f$
+  // Derivative of the free energy function \f$ \frac d{dq} F_i \f$
   std::vector<std::vector<const MaterialProperty<Real> *>> _dFidarg;
 };

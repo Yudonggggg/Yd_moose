@@ -64,20 +64,20 @@ KKSPhaseConcentrationMultiPhaseDerivatives::KKSPhaseConcentrationMultiPhaseDeriv
       _dcidb[m][n].resize(_num_c);
       _dcidetaj[m][n].resize(_num_j);
 
-      /// @{ Derivative of phase concentration wrt global concentration. In _dcidb[m][n][l], m is the species index of ci, n is the phase index of ci, and l is the species index of b
+      // @{ Derivative of phase concentration wrt global concentration. In _dcidb[m][n][l], m is the species index of ci, n is the phase index of ci, and l is the species index of b
       for (const auto l : make_range(_num_c))
         _dcidb[m][n][l] = &declarePropertyDerivative<Real>(_ci_names[n + m * _num_j], _c_names[l]);
-      /// @}
+      // @}
 
-      /// @{ Derivative of phase concentration wrt eta. In _dcidetaj[m][n][l], m is the species index of ci, n is the phase index of ci, and l is the phase of etaj
+      // @{ Derivative of phase concentration wrt eta. In _dcidetaj[m][n][l], m is the species index of ci, n is the phase index of ci, and l is the phase of etaj
       for (const auto l : make_range(_num_j))
         _dcidetaj[m][n][l] =
             &declarePropertyDerivative<Real>(_ci_names[n + m * _num_j], _eta_names[l]);
-      /// @}
+      // @}
     }
   }
 
-  /// @{ Second derivative of free energy wrt phase concentrations for use in this material. In _d2Fidcidbi[m][n][l], m is phase index of Fi, n is the species index of ci, l is the species index of bi.
+  // @{ Second derivative of free energy wrt phase concentrations for use in this material. In _d2Fidcidbi[m][n][l], m is phase index of Fi, n is the species index of ci, l is the species index of bi.
   for (const auto m : make_range(_num_j))
   {
     _d2Fidcidbi[m].resize(_num_c);
@@ -91,7 +91,7 @@ KKSPhaseConcentrationMultiPhaseDerivatives::KKSPhaseConcentrationMultiPhaseDeriv
             _Fj_names[m], _ci_names[m + n * _num_j], _ci_names[m + l * _num_j]);
     }
   }
-  /// @}
+  // @}
 
   for (const auto m : make_range(_num_j))
   {
@@ -107,13 +107,13 @@ KKSPhaseConcentrationMultiPhaseDerivatives::KKSPhaseConcentrationMultiPhaseDeriv
 void
 KKSPhaseConcentrationMultiPhaseDerivatives::computeQpProperties()
 {
-  /// declare Jacobian matrix A
+  // declare Jacobian matrix A
   Eigen::MatrixXd A(_num_c * _num_j, _num_c * _num_j);
 
-  /// initialize all elements in A to be zero
+  // initialize all elements in A to be zero
   A.setZero();
 
-  /// @{ fill in the non-zero elements in A
+  // @{ fill in the non-zero elements in A
   for (const auto m : make_range(_num_c))
   {
     // equal chemical potential derivative equations
@@ -125,7 +125,7 @@ KKSPhaseConcentrationMultiPhaseDerivatives::computeQpProperties()
         A(m * _num_j + n, n + l * _num_j + 1) = -(*_d2Fidcidbi[n + 1][m][l])[_qp];
       }
     }
-    /// @}
+    // @}
 
     // concentration conservation derivative equations
     for (const auto n : make_range(_num_j))
@@ -134,40 +134,40 @@ KKSPhaseConcentrationMultiPhaseDerivatives::computeQpProperties()
 
   A = A.inverse();
 
-  /// @{ solve linear system of constraint derivatives wrt b for computing dcidb loop through derivatives wrt the ith component; they have the same A, but different k_c
+  // @{ solve linear system of constraint derivatives wrt b for computing dcidb loop through derivatives wrt the ith component; they have the same A, but different k_c
   for (const auto i : make_range(_num_c))
   {
     std::vector<Real> k_c(_num_j * _num_c);
     std::vector<Real> x_c(_num_j * _num_c);
 
-    /// assign non-zero elements in k_c
+    // assign non-zero elements in k_c
     k_c[i * _num_j + _num_j - 1] = 1;
 
-    /// @{ compute x_c
+    // @{ compute x_c
     for (const auto m : make_range(_num_j * _num_c))
     {
       for (const auto n : make_range(_num_j * _num_c))
         x_c[m] += A(m, n) * k_c[n];
     }
-    /// @}
+    // @}
 
-    /// @{ assign the values in x_c to _dcidb
+    // @{ assign the values in x_c to _dcidb
     for (const auto m : make_range(_num_c))
     {
       for (const auto n : make_range(_num_j))
         (*_dcidb[m][n][i])[_qp] = x_c[m * _num_j + n];
     }
-    /// @}
+    // @}
   }
-  /// @}
+  // @}
 
-  /// @{ solve linear system of constraint derivatives wrt eta for computing dcidetaj use the same linear matrix as computing dcidb
+  // @{ solve linear system of constraint derivatives wrt eta for computing dcidetaj use the same linear matrix as computing dcidb
   for (const auto i : make_range(_num_j))
   {
     std::vector<Real> k_eta(_num_j * _num_c);
     std::vector<Real> x_eta(_num_j * _num_c);
 
-    /// @{ assign non-zero elements in k_eta
+    // @{ assign non-zero elements in k_eta
     for (const auto m : make_range(_num_c))
     {
       Real sum = 0.0;
@@ -177,23 +177,23 @@ KKSPhaseConcentrationMultiPhaseDerivatives::computeQpProperties()
 
       k_eta[m * _num_j + _num_j - 1] = -sum;
     }
-    /// @}
+    // @}
 
-    /// @{ compute x_eta
+    // @{ compute x_eta
     for (const auto m : make_range(_num_j * _num_c))
     {
       for (const auto n : make_range(_num_j * _num_c))
         x_eta[m] += A(m, n) * k_eta[n];
     }
-    /// @}
+    // @}
 
-    /// @{ assign the values in x_eta to _dcidetaj
+    // @{ assign the values in x_eta to _dcidetaj
     for (const auto m : make_range(_num_c))
     {
       for (const auto n : make_range(_num_j))
         (*_dcidetaj[m][n][i])[_qp] = x_eta[m * _num_j + n];
     }
-    /// @}
+    // @}
   }
-  /// @}
+  // @}
 }

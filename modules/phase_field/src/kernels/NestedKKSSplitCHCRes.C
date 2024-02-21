@@ -51,12 +51,12 @@ NestedKKSSplitCHCRes::NestedKKSSplitCHCRes(const InputParameters & parameters)
 {
   for (const auto i : make_range(_num_c))
   {
-    /// Set _o to the position of the nonlinear variable in the list of global_cs
+    // Set _o to the position of the nonlinear variable in the list of global_cs
     if (coupled("global_cs", i) == _var.number())
       _o = i;
   }
 
-  /// @{ _dcideta and _dcidb are computed in KKSPhaseConcentrationDerivatives
+  // @{ _dcideta and _dcidb are computed in KKSPhaseConcentrationDerivatives
   for (const auto m : make_range(_num_c))
   {
     _dcadetaj[m].resize(_num_j);
@@ -69,16 +69,16 @@ NestedKKSSplitCHCRes::NestedKKSSplitCHCRes(const InputParameters & parameters)
   }
   // @}
 
-  /// @{ _dFaca and _d2Fadcadba are computed in KKSPhaseConcentrationMaterial
+  // @{ _dFaca and _d2Fadcadba are computed in KKSPhaseConcentrationMaterial
   for (const auto m : make_range(_num_c))
   {
     _dFadca[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ca_names[m]);
     _d2Fadcadba[m] =
         &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ca_names[_o], _ca_names[m]);
   }
-  /// @}
+  // @}
 
-  /// _d2Fadcadarg is computed in KKSPhaseConcentrationMaterial
+  // _d2Fadcadarg is computed in KKSPhaseConcentrationMaterial
   for (const auto m : make_range(_n_args))
     _d2Fadcadarg[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ca_names[_o], m);
 }
@@ -105,11 +105,11 @@ NestedKKSSplitCHCRes::computeQpOffDiagJacobian(unsigned int jvar)
 {
   Real sum = 0.0;
 
-  /// treat w variable explicitly
+  // treat w variable explicitly
   if (jvar == _w_var)
     return -_phi[_j][_qp] * _test[_i][_qp];
 
-  /// @{ if b is the coupled variable
+  // @{ if b is the coupled variable
   auto compvar = mapJvarToCvar(jvar, _c_map);
   if (compvar >= 0)
   {
@@ -118,9 +118,9 @@ NestedKKSSplitCHCRes::computeQpOffDiagJacobian(unsigned int jvar)
 
     return sum * _phi[_j][_qp] * _test[_i][_qp];
   }
-  /// @}
+  // @}
 
-  /// @{ if order parameters are the coupled variables
+  // @{ if order parameters are the coupled variables
   auto etavar = mapJvarToCvar(jvar, _eta_map);
   if (etavar >= 0)
   {
@@ -129,9 +129,9 @@ NestedKKSSplitCHCRes::computeQpOffDiagJacobian(unsigned int jvar)
 
     return sum * _phi[_j][_qp] * _test[_i][_qp];
   }
-  /// @}
+  // @}
 
-  /// for all other vars get the coupled variable jvar is referring to
+  // for all other vars get the coupled variable jvar is referring to
   const unsigned int cvar = mapJvarToCvar(jvar);
   return (*_d2Fadcadarg[cvar])[_qp] * _phi[_j][_qp] * _test[_i][_qp];
 }

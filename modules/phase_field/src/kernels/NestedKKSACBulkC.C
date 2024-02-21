@@ -39,16 +39,16 @@ NestedKKSACBulkC::NestedKKSACBulkC(const InputParameters & parameters)
     _d2Fadcadba(_num_c),
     _d2Fadcadarg(_n_args)
 {
-  /// @{ Declare _prop_ci to be a matrix for easy reference. In _prop_ci[m][n], m is species index, n is the phase index.
+  // @{ Declare _prop_ci to be a matrix for easy reference. In _prop_ci[m][n], m is species index, n is the phase index.
   for (const auto m : make_range(_num_c))
   {
     _prop_ci[m].resize(2);
     for (const auto n : make_range(2))
       _prop_ci[m][n] = &getMaterialPropertyByName<Real>(_ci_names[m * 2 + n]);
   }
-  /// @}
+  // @}
 
-  /// @{ _dcideta and _dcidb are computed in KKSPhaseConcentrationDerivatives
+  // @{ _dcideta and _dcidb are computed in KKSPhaseConcentrationDerivatives
   for (const auto m : make_range(_num_c))
   {
     _dcideta[m].resize(2);
@@ -61,9 +61,9 @@ NestedKKSACBulkC::NestedKKSACBulkC(const InputParameters & parameters)
         _dcidb[m][n][l] = &getMaterialPropertyDerivative<Real>(_ci_names[m * 2 + n], _c_names[l]);
     }
   }
-  /// @}
+  // @}
 
-  /// @{ _dFadca and _d2Fadcadba are computed in KKSPhaseConcentrationMaterial
+  // @{ _dFadca and _d2Fadcadba are computed in KKSPhaseConcentrationMaterial
   for (const auto m : make_range(_num_c))
   {
     _dFadca[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ci_names[m * 2]);
@@ -72,9 +72,9 @@ NestedKKSACBulkC::NestedKKSACBulkC(const InputParameters & parameters)
       _d2Fadcadba[m][n] =
           &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ci_names[m * 2], _ci_names[n * 2]);
   }
-  /// @}
+  // @}
 
-  /// @{ _d2Fadcadarg are computed in KKSPhaseConcentrationMaterial
+  // @{ _d2Fadcadarg are computed in KKSPhaseConcentrationMaterial
   for (const auto m : make_range(_num_c))
   {
     _d2Fadcadarg[m].resize(_n_args);
@@ -82,7 +82,7 @@ NestedKKSACBulkC::NestedKKSACBulkC(const InputParameters & parameters)
       _d2Fadcadarg[m][n] =
           &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ci_names[m * 2], n);
   }
-  /// @}
+  // @}
 }
 
 Real

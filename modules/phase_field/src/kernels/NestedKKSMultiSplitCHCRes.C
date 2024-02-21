@@ -51,13 +51,13 @@ NestedKKSMultiSplitCHCRes::NestedKKSMultiSplitCHCRes(const InputParameters & par
 {
   for (const auto i : make_range(_num_c))
   {
-    /// @{ Set _o to the position of the nonlinear variable in the list of global_cs
+    // @{ Set _o to the position of the nonlinear variable in the list of global_cs
     if (coupled("global_cs", i) == _var.number())
       _o = i;
-    /// @}
+    // @}
   }
 
-  /// @{ _dcideta and _dcidb are computed in KKSPhaseConcentrationDerivatives
+  // @{ _dcideta and _dcidb are computed in KKSPhaseConcentrationDerivatives
   for (const auto m : make_range(_num_c))
   {
     _dc1detaj[m].resize(_num_j);
@@ -68,21 +68,21 @@ NestedKKSMultiSplitCHCRes::NestedKKSMultiSplitCHCRes(const InputParameters & par
     for (const auto n : make_range(_num_c))
       _dc1db[m][n] = &getMaterialPropertyDerivative<Real>(_c1_names[m], _c_names[n]);
   }
-  /// @}
+  // @}
 
-  /// @{ _dF1dc1 and _d2F1dc1db1 are computed in KKSPhaseConcentrationMaterial
+  // @{ _dF1dc1 and _d2F1dc1db1 are computed in KKSPhaseConcentrationMaterial
   for (const auto m : make_range(_num_c))
   {
     _dF1dc1[m] = &getMaterialPropertyDerivative<Real>("cp" + _F1_name, _c1_names[m]);
     _d2F1dc1db1[m] =
         &getMaterialPropertyDerivative<Real>("cp" + _F1_name, _c1_names[_o], _c1_names[m]);
   }
-  /// @}
+  // @}
 
-  /// @{ _d2F1dc1darg is computed in KKSPhaseConcentrationMaterial
+  // @{ _d2F1dc1darg is computed in KKSPhaseConcentrationMaterial
   for (const auto m : make_range(_n_args))
     _d2F1dc1darg[m] = &getMaterialPropertyDerivative<Real>("cp" + _F1_name, _c1_names[_o], m);
-  /// @}
+  // @}
 }
 
 Real
@@ -107,11 +107,11 @@ NestedKKSMultiSplitCHCRes::computeQpOffDiagJacobian(unsigned int jvar)
 {
   Real sum = 0.0;
 
-  /// treat w variable explicitly
+  // treat w variable explicitly
   if (jvar == _w_var)
     return -_phi[_j][_qp] * _test[_i][_qp];
 
-  /// @{ if b is the coupled variable
+  // @{ if b is the coupled variable
   auto compvar = mapJvarToCvar(jvar, _c_map);
   if (compvar >= 0)
   {
@@ -120,9 +120,9 @@ NestedKKSMultiSplitCHCRes::computeQpOffDiagJacobian(unsigned int jvar)
 
     return sum * _phi[_j][_qp] * _test[_i][_qp];
   }
-  /// @}
+  // @}
 
-  /// @{ if order parameters are the coupled variables
+  // @{ if order parameters are the coupled variables
   auto etavar = mapJvarToCvar(jvar, _eta_map);
   if (etavar >= 0)
   {
@@ -131,9 +131,9 @@ NestedKKSMultiSplitCHCRes::computeQpOffDiagJacobian(unsigned int jvar)
 
     return sum * _phi[_j][_qp] * _test[_i][_qp];
   }
-  /// @}
+  // @}
 
-  /// for all other vars get the coupled variable jvar is referring to
+  // for all other vars get the coupled variable jvar is referring to
   const unsigned int cvar = mapJvarToCvar(jvar);
 
   return (*_d2F1dc1darg[cvar])[_qp] * _phi[_j][_qp] * _test[_i][_qp];

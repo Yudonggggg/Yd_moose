@@ -50,15 +50,15 @@ NestedKKSMultiACBulkF::NestedKKSMultiACBulkF(const InputParameters & parameters)
 {
   for (const auto i : make_range(_num_j))
   {
-    /// get order parameter names and variable indices
+    // get order parameter names and variable indices
     _eta_names[i] = getVar("all_etas", i)->name();
 
-    /// Set _k to the position of the nonlinear variable in the list of etaj's
+    // Set _k to the position of the nonlinear variable in the list of etaj's
     if (coupled("all_etas", i) == _var.number())
       _k = i;
   }
 
-  /// @{ _dcideta and _dcidb are computed in KKSPhaseConcentrationDerivatives
+  // @{ _dcideta and _dcidb are computed in KKSPhaseConcentrationDerivatives
   for (const auto m : make_range(_num_c))
   {
     _dcidetaj[m].resize(_num_j);
@@ -78,7 +78,7 @@ NestedKKSMultiACBulkF::NestedKKSMultiACBulkF(const InputParameters & parameters)
             &getMaterialPropertyDerivative<Real>(_ci_names[n + m * _num_j], _c_names[l]);
     }
   }
-  /// @}
+  // @}
 
   // _dF1dc1 is computed in KKSPhaseConcentrationMaterial
   for (const auto m : make_range(_num_c))
@@ -117,12 +117,12 @@ NestedKKSMultiACBulkF::computeDFDOP(PFFunctionType type)
       return sum + _wi * _dgi[_qp];
 
     case Jacobian:
-      /// @{ For when this kernel is used in the Lagrange multiplier equation. In that case the Lagrange multiplier is the nonlinear variable
+      // @{ For when this kernel is used in the Lagrange multiplier equation. In that case the Lagrange multiplier is the nonlinear variable
       if (_etai_var != _var.number())
         return 0.0;
-      /// @}
+      // @}
 
-      /// @{ if eta_i is the nonlinear variable
+      // @{ if eta_i is the nonlinear variable
       for (const auto m : make_range(_num_j))
       {
         Real sum1 = 0.0;
@@ -133,7 +133,7 @@ NestedKKSMultiACBulkF::computeDFDOP(PFFunctionType type)
         sum +=
             (*_d2hjdetaidetap[m][_k])[_qp] * (*_prop_Fj[m])[_qp] + (*_prop_dhjdetai[m])[_qp] * sum1;
       }
-      /// @}
+      // @}
 
       return _phi[_j][_qp] * (sum + _wi * _d2gi[_qp]);
   }
@@ -144,12 +144,12 @@ NestedKKSMultiACBulkF::computeDFDOP(PFFunctionType type)
 Real
 NestedKKSMultiACBulkF::computeQpOffDiagJacobian(unsigned int jvar)
 {
-  /// first get dependence of mobility _L on other variables using parent class member function Real
+  // first get dependence of mobility _L on other variables using parent class member function Real
   Real res = ACBulk<Real>::computeQpOffDiagJacobian(jvar);
 
   Real sum = 0.0;
 
-  /// @{ if concentrations are the coupled variables
+  // @{ if concentrations are the coupled variables
   auto compvar = mapJvarToCvar(jvar, _c_map);
   if (compvar >= 0)
   {
@@ -167,9 +167,9 @@ NestedKKSMultiACBulkF::computeQpOffDiagJacobian(unsigned int jvar)
 
     return res;
   }
-  /// @}
+  // @}
 
-  /// @{ if order parameters are the coupled variables
+  // @{ if order parameters are the coupled variables
   auto etavar = mapJvarToCvar(jvar, _eta_map);
   if (etavar >= 0)
   {
@@ -188,23 +188,23 @@ NestedKKSMultiACBulkF::computeQpOffDiagJacobian(unsigned int jvar)
 
     return res;
   }
-  /// @}
+  // @}
 
-  /// @{ Handle the case when this kernel is used in the Lagrange multiplier equation. In this case the second derivative of the barrier function contributes to the off-diagonal Jacobian
+  // @{ Handle the case when this kernel is used in the Lagrange multiplier equation. In this case the second derivative of the barrier function contributes to the off-diagonal Jacobian
   if (jvar == _etai_var)
   {
     sum += _wi * _d2gi[_qp];
 
     res += _L[_qp] * sum * _phi[_j][_qp] * _test[_i][_qp];
   }
-  /// @}
+  // @}
 
-  /// @{ for all other vars get the coupled variable jvar is referring to
+  // @{ for all other vars get the coupled variable jvar is referring to
   const unsigned int cvar = mapJvarToCvar(jvar);
   for (const auto m : make_range(_num_j))
     res -= _L[_qp] * (*_prop_dhjdetai[m])[_qp] * (*_dFidarg[m][cvar])[_qp] * _phi[_j][_qp] *
            _test[_i][_qp];
-  /// @}
+  // @}
 
   return res;
 }

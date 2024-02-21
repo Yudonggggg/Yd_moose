@@ -57,22 +57,23 @@ KKSPhaseConcentrationDerivatives::KKSPhaseConcentrationDerivatives(
     _dcidb[m].resize(2);
     for (const auto n : make_range(2))
     {
-      /// @{ Derivative of phase concentration wrt eta. In _dcideta[m][n], m is the species index of ci, n is the phase index of ci
+      // @{ Derivative of phase concentration wrt eta. In _dcideta[m][n], m is the species index of ci, n is the phase index of ci
       _dcideta[m][n] = &declarePropertyDerivative<Real>(_ci_names[m * 2 + n], _eta_name);
       _dcidb[m][n].resize(_num_c);
-      /// @}
+      // @}
 
-      /// @{Derivative of phase concentration wrt global concentration. In _dcidb[m][n][l], m is the species index of ci, n is the phase index of ci, l is the species index of b
+      // @{Derivative of phase concentration wrt global concentration. In _dcidb[m][n][l], m is the species index of ci, n is the phase index of ci, l is the species index of b
       for (const auto l : make_range(_num_c))
         _dcidb[m][n][l] = &declarePropertyDerivative<Real>(_ci_names[m * 2 + n], _c_names[l]);
-      /// @}
+      // @}
     }
   }
 
   /** Second derivative of free energy wrt phase concentrations for use in this material. In
       _d2Fidcidbi[m][n][l], m is phase index of Fi, n is the species index of ci, l is the species
       index of bi.
-  */// @{
+  */
+ // @{
   for (const auto m : make_range(2))
   {
     _d2Fidcidbi[m].resize(_num_c);
@@ -91,18 +92,18 @@ KKSPhaseConcentrationDerivatives::KKSPhaseConcentrationDerivatives(
       }
     }
   }
-  /// @}
+  // @}
 }
 
 void
 KKSPhaseConcentrationDerivatives::computeQpProperties()
 {
-  /// declare Jacobian matrix A
+  // declare Jacobian matrix A
   Eigen::MatrixXd A(_num_c * 2, _num_c * 2);
 
   A.setZero();
 
-  /// fill in the non-zero elements in A
+  // fill in the non-zero elements in A
   for (const auto m : make_range(_num_c))
   {
     for (const auto n : make_range(_num_c))
@@ -119,13 +120,13 @@ KKSPhaseConcentrationDerivatives::computeQpProperties()
 
   A = A.inverse();
 
-  /// @{ solve linear system of constraint derivatives wrt b for computing dcidb loop through derivatives wrt the ith component; they have the same A, but different k_c
+  // @{ solve linear system of constraint derivatives wrt b for computing dcidb loop through derivatives wrt the ith component; they have the same A, but different k_c
   for (const auto i : make_range(_num_c))
   {
     std::vector<Real> k_c(_num_c * 2);
     std::vector<Real> x_c(_num_c * 2);
 
-    /// assign the non-zero elements in k_c
+    // assign the non-zero elements in k_c
     k_c[i * 2 + 1] = 1;
 
     // compute x_c
@@ -143,32 +144,32 @@ KKSPhaseConcentrationDerivatives::computeQpProperties()
     }
   }
 
-  /// @{ solve linear system of constraint derivatives wrt eta for computing dcideta use the same linear matrix as computing dcidb
+  // @{ solve linear system of constraint derivatives wrt eta for computing dcideta use the same linear matrix as computing dcidb
   std::vector<Real> k_eta(_num_c * 2);
   std::vector<Real> x_eta(_num_c * 2);
-  /// @}
+  // @}
 
-  /// @{ fill in k_eta
+  // @{ fill in k_eta
   for (const auto m : make_range(_num_c))
   {
     k_eta[m * 2] = 0;
     k_eta[m * 2 + 1] = _prop_dh[_qp] * ((*_prop_ci[m * 2])[_qp] - (*_prop_ci[m * 2 + 1])[_qp]);
   }
-  /// @}
+  // @}
 
-  /// @{ compute x_eta
+  // @{ compute x_eta
   for (const auto m : make_range(_num_c * 2))
   {
     for (const auto n : make_range(_num_c * 2))
       x_eta[m] += A(m, n) * k_eta[n];
   }
-  /// @}
+  // @}
 
-  /// @{ assign the values in x_eta to _dcideta
+  // @{ assign the values in x_eta to _dcideta
   for (const auto m : make_range(_num_c))
   {
     for (const auto n : make_range(2))
       (*_dcideta[m][n])[_qp] = x_eta[m * 2 + n];
   }
-  /// @}
+  // @}
 }

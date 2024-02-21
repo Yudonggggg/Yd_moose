@@ -49,12 +49,12 @@ NestedKKSACBulkF::NestedKKSACBulkF(const InputParameters & parameters)
     _dFadarg(_n_args),
     _dFbdarg(_n_args)
 {
-  /// @{ _prop_Fi is computed in KKSPhaseConcentrationMaterial
+  // @{ _prop_Fi is computed in KKSPhaseConcentrationMaterial
   _prop_Fi[0] = &getMaterialPropertyByName<Real>("cp" + _Fa_name);
   _prop_Fi[1] = &getMaterialPropertyByName<Real>("cp" + _Fb_name);
-  /// @}
+  // @}
 
-  /// @{ _dcideta and _dcid are computed in KKSPhaseConcentrationDerivatives
+  // @{ _dcideta and _dcid are computed in KKSPhaseConcentrationDerivatives
   for (const auto m : make_range(_num_c))
   {
     _dcideta[m].resize(2);
@@ -69,21 +69,21 @@ NestedKKSACBulkF::NestedKKSACBulkF(const InputParameters & parameters)
     }
   }
 
-  /// @{ _dFadca and _dFbdcb are computed in KKSPhaseConcentrationMaterial
+  // @{ _dFadca and _dFbdcb are computed in KKSPhaseConcentrationMaterial
   for (const auto m : make_range(_num_c))
   {
     _dFadca[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, _ci_names[m * 2]);
     _dFbdcb[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fb_name, _ci_names[m * 2 + 1]);
   }
-  /// @}
+  // @}
 
-  /// @{ _dFadarg and _dFbdarg are computed in KKSPhaseConcentrationMaterial
+  // @{ _dFadarg and _dFbdarg are computed in KKSPhaseConcentrationMaterial
   for (const auto m : make_range(_n_args))
   {
     _dFadarg[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fa_name, m);
     _dFbdarg[m] = &getMaterialPropertyDerivative<Real>("cp" + _Fb_name, m);
   }
-  /// @}
+  // @}
 }
 
 Real
@@ -109,10 +109,10 @@ NestedKKSACBulkF::computeDFDOP(PFFunctionType type)
 Real
 NestedKKSACBulkF::computeQpOffDiagJacobian(unsigned int jvar)
 {
-  /// first get dependence of mobility _L on other variables using parent class member function
+  // first get dependence of mobility _L on other variables using parent class member function
   Real res = ACBulk<Real>::computeQpOffDiagJacobian(jvar);
 
-  /// @{ Then add dependence of KKSACBulkF on other variables, and treat c specially using chain rule
+  // @{ Then add dependence of KKSACBulkF on other variables, and treat c specially using chain rule
   auto compvar = mapJvarToCvar(jvar, _c_map);
 
   if (compvar >= 0)
@@ -124,14 +124,14 @@ NestedKKSACBulkF::computeQpOffDiagJacobian(unsigned int jvar)
 
     res -= _L[_qp] * _prop_dh[_qp] * sum * _phi[_j][_qp] * _test[_i][_qp];
   }
-  /// @}
+  // @}
 
-  /// @{ for all other vars get the coupled variable jvar is referring to
+  // @{ for all other vars get the coupled variable jvar is referring to
   const unsigned int cvar = mapJvarToCvar(jvar);
 
   res -= _L[_qp] * _prop_dh[_qp] * ((*_dFadarg[cvar])[_qp] - (*_dFbdarg[cvar])[_qp]) *
          _phi[_j][_qp] * _test[_i][_qp];
-  /// @}
+  // @}
 
   return res;
 }

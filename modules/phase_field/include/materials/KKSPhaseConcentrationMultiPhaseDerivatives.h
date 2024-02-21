@@ -21,30 +21,30 @@ public:
 protected:
   virtual void computeQpProperties() override;
 
-  /// Number of global concentrations
+  // Number of global concentrations
   const unsigned int _num_c;
 
-  /// Names of global concentrations
+  // Names of global concentrations
   const std::vector<VariableName> _c_names;
 
-  /// Phase parameters
+  // Phase parameters
   const std::vector<VariableName> _eta_names;
 
-  /// Number of phase parameters
+  // Number of phase parameters
   const unsigned int _num_j;
 
-  /// @{ Phase concentrations
+  // @{ Phase concentrations
   std::vector<const MaterialProperty<Real> *> _prop_ci;
   std::vector<MaterialPropertyName> _ci_names;
-  /// @}
+  // @}
 
-  /// Derivative of phase concentrations wrt etaj \f$ \frac d{d{eta_j}} c_i \f$
+  // Derivative of phase concentrations wrt etaj \f$ \frac d{d{eta_j}} c_i \f$
   std::vector<std::vector<std::vector<MaterialProperty<Real> *>>> _dcidetaj;
 
-  /// Derivative of phase concentrations wrt global concentrations \f$ \frac d{db} c_i \f$
+  // Derivative of phase concentrations wrt global concentrations \f$ \frac d{db} c_i \f$
   std::vector<std::vector<std::vector<MaterialProperty<Real> *>>> _dcidb;
 
-  /// Free energy names
+  // Free energy names
   std::vector<MaterialName> _Fj_names;
 
   /** Second derivative of phase concentrations wrt two phase concentrations \f$ \frac {d^2}{dc_i
@@ -52,11 +52,11 @@ protected:
   */
   std::vector<std::vector<std::vector<const MaterialProperty<Real> *>>> _d2Fidcidbi;
 
-  /// @{ Switching functions
+  // @{ Switching functions
   std::vector<MaterialPropertyName> _hj_names;
   std::vector<const MaterialProperty<Real> *> _prop_hj;
-  /// @}
+  // @}
 
-  /// Derivatives of switching functions
+  // Derivatives of switching functions
   std::vector<std::vector<const MaterialProperty<Real> *>> _dhjdetai;
 };

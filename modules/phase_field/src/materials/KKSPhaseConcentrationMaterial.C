@@ -77,39 +77,39 @@ KKSPhaseConcentrationMaterial::KKSPhaseConcentrationMaterial(const InputParamete
     _nested_solve(NestedSolve(parameters))
 
 {
-  /// @{ phase concentrations
+  // @{ phase concentrations
   for (const auto m : make_range(_num_c * 2))
   {
     _prop_ci[m] = &declareProperty<Real>(_ci_names[m]);
     _ci_old[m] = &getMaterialPropertyOld<Real>(_ci_names[m]);
   }
-  /// @}
+  // @}
 
-  /// @{ free energies
+  // @{ free energies
   _prop_Fi[0] = &getMaterialPropertyByName<Real>(_Fa_name);
   _prop_Fi[1] = &getMaterialPropertyByName<Real>(_Fb_name);
-  /// @}
+  // @}
 
-  /// @{ declare _fi_copy to be passed to the kernels
+  // @{ declare _fi_copy to be passed to the kernels
   _Fi_copy[0] = &declareProperty<Real>("cp" + _Fa_name);
   _Fi_copy[1] = &declareProperty<Real>("cp" + _Fb_name);
-  /// @}
+  // @}
 
-  /// @{ derivative of free energy wrt phase concentrations
+  // @{ derivative of free energy wrt phase concentrations
   for (const auto m : make_range(_num_c))
   {
     _dFidci[m * 2] = &getMaterialPropertyDerivative<Real>(_Fa_name, _ci_names[m * 2]);
     _dFidci[m * 2 + 1] = &getMaterialPropertyDerivative<Real>(_Fb_name, _ci_names[m * 2 + 1]);
 
-    /// @{ declare _dFidci_copy to be passed to the kernels
+    // @{ declare _dFidci_copy to be passed to the kernels
     _dFidci_copy[m * 2] = &declarePropertyDerivative<Real>("cp" + _Fa_name, _ci_names[m * 2]);
     _dFidci_copy[m * 2 + 1] =
         &declarePropertyDerivative<Real>("cp" + _Fb_name, _ci_names[m * 2 + 1]);
-    /// @}
+    // @}
   }
-  /// @}
+  // @}
 
-  /// @{ Second derivative of free energy wrt phase concentrations for use in this material. In _d2Fidcidbi[m][n][l], m is phase index of Fi, n is the species index of ci, l is the species index of bi.
+  // @{ Second derivative of free energy wrt phase concentrations for use in this material. In _d2Fidcidbi[m][n][l], m is phase index of Fi, n is the species index of ci, l is the species index of bi.
   for (const auto m : make_range(2))
   {
     _d2Fidcidbi[m].resize(_num_c);
@@ -128,9 +128,9 @@ KKSPhaseConcentrationMaterial::KKSPhaseConcentrationMaterial(const InputParamete
       }
     }
   }
-  /// @}
+  // @}
 
-  /// @{ _d2Fadc1db1_copy (2D symmetric matrix), to be passed to kernels
+  // @{ _d2Fadc1db1_copy (2D symmetric matrix), to be passed to kernels
   for (const auto m : make_range(_num_c))
   {
     _d2Fadc1db1_copy[m].resize(_num_c);
@@ -138,9 +138,9 @@ KKSPhaseConcentrationMaterial::KKSPhaseConcentrationMaterial(const InputParamete
       _d2Fadc1db1_copy[m][n] =
           &declarePropertyDerivative<Real>("cp" + _Fa_name, _ci_names[m * 2], _ci_names[n * 2]);
   }
-  /// @}
+  // @}
 
-  /// @{ partial derivative of Fa and Fb wrt coupled variables, to be passed to kernels
+  // @{ partial derivative of Fa and Fb wrt coupled variables, to be passed to kernels
   for (const auto m : make_range(_n_args))
   {
     _dFadarg[m] = &getMaterialPropertyDerivative<Real>(_Fa_name, _args_names[m]);
@@ -148,9 +148,9 @@ KKSPhaseConcentrationMaterial::KKSPhaseConcentrationMaterial(const InputParamete
     _dFbdarg[m] = &getMaterialPropertyDerivative<Real>(_Fb_name, _args_names[m]);
     _dFbdarg_copy[m] = &declarePropertyDerivative<Real>("cp" + _Fb_name, _args_names[m]);
   }
-  /// @}
+  // @}
 
-  /// @{ second partial derivatives of Fa wrt ca and another coupled variable, to be passed to kernels
+  // @{ second partial derivatives of Fa wrt ca and another coupled variable, to be passed to kernels
   for (const auto m : make_range(_n_args))
   {
     _d2Fadcadarg[m].resize(_num_c);
@@ -163,7 +163,7 @@ KKSPhaseConcentrationMaterial::KKSPhaseConcentrationMaterial(const InputParamete
           &declarePropertyDerivative<Real>("cp" + _Fa_name, _ci_names[n * 2], _args_names[m]);
     }
   }
-  /// @}
+  // @}
 
   if (_damped_newton)
     _C = &getMaterialPropertyByName<Real>(_condition_name);
@@ -190,7 +190,7 @@ KKSPhaseConcentrationMaterial::initialSetup()
 void
 KKSPhaseConcentrationMaterial::computeQpProperties()
 {
-  /// parameters for nested Newton iteration
+  // parameters for nested Newton iteration
   NestedSolve::Value<> solution(_num_c * 2);
 
   for (unsigned int m = 0; m < _num_c * 2; ++m)
@@ -209,7 +209,7 @@ KKSPhaseConcentrationMaterial::computeQpProperties()
     _Fa->computePropertiesAtQp(_qp);
     _Fb->computePropertiesAtQp(_qp);
 
-    /// assign residual functions
+    // assign residual functions
     for (const auto m : make_range(_num_c))
     {
       residual(m * 2) = (*_dFidci[m * 2])[_qp] - (*_dFidci[m * 2 + 1])[_qp];
@@ -219,23 +219,23 @@ KKSPhaseConcentrationMaterial::computeQpProperties()
 
     jacobian.setZero();
 
-    /// @{ fill in the non-zero elements in jacobian
+    // @{ fill in the non-zero elements in jacobian
     for (const auto m : make_range(_num_c))
     {
       for (const auto n : make_range(_num_c))
       {
-        /// @{ equal chemical potential derivative equations
+        // @{ equal chemical potential derivative equations
         jacobian(m * 2, n * 2) = (*_d2Fidcidbi[0][m][n])[_qp];
         jacobian(m * 2, n * 2 + 1) = -(*_d2Fidcidbi[1][m][n])[_qp];
-        /// @}
+        // @}
       }
 
-      /// @{ concentration conservation derivative equations
+      // @{ concentration conservation derivative equations
       jacobian(m * 2 + 1, m * 2) = 1 - _prop_h[_qp];
       jacobian(m * 2 + 1, m * 2 + 1) = _prop_h[_qp];
-      /// @}
+      // @}
     }
-    /// @}
+    // @}
   };
   auto computeCondition = [&](const NestedSolve::Value<> & guess) -> Real
   {
@@ -244,23 +244,23 @@ KKSPhaseConcentrationMaterial::computeQpProperties()
     _condition->computePropertiesAtQp(_qp);
     return ((*_C)[_qp]);
   };
-  /// @{ choose between Newton or damped Newton's method
+  // @{ choose between Newton or damped Newton's method
   if (!_damped_newton)
     _nested_solve.nonlinear(solution, compute);
   else
     _nested_solve.nonlinearDamped(solution, compute, computeCondition);
   _iter[_qp] = _nested_solve.getIterations();
-  /// @}
+  // @}
 
   if (_nested_solve.getState() == NestedSolve::State::NOT_CONVERGED)
     mooseException("Nested Newton iteration did not converge.");
 
-  /// @{ assign solution to ci
+  // @{ assign solution to ci
   for (const auto m : make_range(_num_c * 2))
     (*_prop_ci[m])[_qp] = solution[m];
-  /// @}
+  // @}
 
-  /// @{ assign to the copied parameters to be used in kernels
+  // @{ assign to the copied parameters to be used in kernels
   for (const auto m : make_range(2))
     (*_Fi_copy[m])[_qp] = (*_prop_Fi[m])[_qp];
 
@@ -284,5 +284,5 @@ KKSPhaseConcentrationMaterial::computeQpProperties()
     for (const auto n : make_range(_num_c))
       (*_d2Fadcadarg_copy[m][n])[_qp] = (*_d2Fadcadarg[m][n])[_qp];
   }
-  /// @}
+  // @}
 }
