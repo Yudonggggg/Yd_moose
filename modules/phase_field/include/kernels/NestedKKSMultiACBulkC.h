@@ -65,6 +65,7 @@ protected:
   // Second derivative of the free energy function \f$ \frac {d^2}{dc_1 db_1} F_1 \f$
   std::vector<std::vector<const MaterialProperty<Real> *>> _d2F1dc1db1;
 
-  // Mixed partial derivatives of the free energy function wrt c and any other coupled variables \f$ \frac {d^2}{dc_1 dq} F_1 \f$
+  // Mixed partial derivatives of the free energy function wrt c and any other coupled variables \f$
+  // \frac {d^2}{dc_1 dq} F_1 \f$
   std::vector<std::vector<const MaterialProperty<Real> *>> _d2F1dc1darg;
 };

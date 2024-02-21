@@ -39,7 +39,8 @@ NestedKKSACBulkC::NestedKKSACBulkC(const InputParameters & parameters)
     _d2Fadcadba(_num_c),
     _d2Fadcadarg(_n_args)
 {
-  // @{ Declare _prop_ci to be a matrix for easy reference. In _prop_ci[m][n], m is species index, n is the phase index.
+  // @{ Declare _prop_ci to be a matrix for easy reference. In _prop_ci[m][n], m is species index, n
+  // is the phase index.
   for (const auto m : make_range(_num_c))
   {
     _prop_ci[m].resize(2);

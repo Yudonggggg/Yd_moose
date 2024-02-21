@@ -117,7 +117,8 @@ NestedKKSMultiACBulkF::computeDFDOP(PFFunctionType type)
       return sum + _wi * _dgi[_qp];
 
     case Jacobian:
-      // @{ For when this kernel is used in the Lagrange multiplier equation. In that case the Lagrange multiplier is the nonlinear variable
+      // @{ For when this kernel is used in the Lagrange multiplier equation. In that case the
+      // Lagrange multiplier is the nonlinear variable
       if (_etai_var != _var.number())
         return 0.0;
       // @}
@@ -190,7 +191,8 @@ NestedKKSMultiACBulkF::computeQpOffDiagJacobian(unsigned int jvar)
   }
   // @}
 
-  // @{ Handle the case when this kernel is used in the Lagrange multiplier equation. In this case the second derivative of the barrier function contributes to the off-diagonal Jacobian
+  // @{ Handle the case when this kernel is used in the Lagrange multiplier equation. In this case
+  // the second derivative of the barrier function contributes to the off-diagonal Jacobian
   if (jvar == _etai_var)
   {
     sum += _wi * _d2gi[_qp];

@@ -109,7 +109,9 @@ KKSPhaseConcentrationMaterial::KKSPhaseConcentrationMaterial(const InputParamete
   }
   // @}
 
-  // @{ Second derivative of free energy wrt phase concentrations for use in this material. In _d2Fidcidbi[m][n][l], m is phase index of Fi, n is the species index of ci, l is the species index of bi.
+  // @{ Second derivative of free energy wrt phase concentrations for use in this material. In
+  // _d2Fidcidbi[m][n][l], m is phase index of Fi, n is the species index of ci, l is the species
+  // index of bi.
   for (const auto m : make_range(2))
   {
     _d2Fidcidbi[m].resize(_num_c);
@@ -150,7 +152,8 @@ KKSPhaseConcentrationMaterial::KKSPhaseConcentrationMaterial(const InputParamete
   }
   // @}
 
-  // @{ second partial derivatives of Fa wrt ca and another coupled variable, to be passed to kernels
+  // @{ second partial derivatives of Fa wrt ca and another coupled variable, to be passed to
+  // kernels
   for (const auto m : make_range(_n_args))
   {
     _d2Fadcadarg[m].resize(_num_c);

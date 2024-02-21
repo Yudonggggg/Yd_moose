@@ -52,7 +52,8 @@ protected:
   std::vector<MaterialProperty<Real> *> _dFidci_copy;
   // @}
 
-  // @{ Second derivative of free energies wrt phase concentrations \f$ \frac {d^2}{dc_i db_i} F_i \f$
+  // @{ Second derivative of free energies wrt phase concentrations \f$ \frac {d^2}{dc_i db_i} F_i
+  // \f$
   std::vector<std::vector<std::vector<const MaterialProperty<Real> *>>> _d2Fidcidbi;
   std::vector<std::vector<MaterialProperty<Real> *>> _d2Fadc1db1_copy;
   // @}
@@ -73,7 +74,8 @@ protected:
   std::vector<MaterialProperty<Real> *> _dFbdarg_copy;
   // @}
 
-  // @{ Second derivative of free energy Fa wrt phase concentration ca and a coupled variable \f$ \frac{d^2}{dc_a dq} F_a \f$
+  // @{ Second derivative of free energy Fa wrt phase concentration ca and a coupled variable \f$
+  // \frac{d^2}{dc_a dq} F_a \f$
   std::vector<std::vector<const MaterialProperty<Real> *>> _d2Fadcadarg;
   std::vector<std::vector<MaterialProperty<Real> *>> _d2Fadcadarg_copy;
   // @}

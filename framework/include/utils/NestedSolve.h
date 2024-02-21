@@ -166,7 +166,8 @@ public:
   static Real normSquare(const NSRealVectorValue & v);
   //@}
 
-  //@{ Check if |a| < |b * c| for all elements in a and b. This checks if 'a' is small relative to 'b' by a factor of 'c'
+  //@{ Check if |a| < |b * c| for all elements in a and b. This checks if 'a' is small relative to
+  //'b' by a factor of 'c'
   template <typename V>
   static bool isRelSmall(const V & a, const V & b, const V & c);
   static bool isRelSmall(const NSReal & a, const NSReal & b, const NSReal & c);
@@ -529,7 +530,8 @@ NestedSolveTempl<is_ad>::nonlinearDamped(V & guess, T && compute, C && computeCo
     r_square = normSquare(residual);
   }
 
-  // @{ if we exceed the max iterations, we could still be converged (considering the acceptable multiplier)
+  // @{ if we exceed the max iterations, we could still be converged (considering the acceptable
+  // multiplier)
   if (!isConverged(r0_square, r_square, /*acceptable=*/true))
     _state = State::NOT_CONVERGED;
   // @}
