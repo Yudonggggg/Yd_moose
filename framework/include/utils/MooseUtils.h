@@ -110,6 +110,11 @@ void escape(std::string & str);
 std::string trim(const std::string & str, const std::string & white_space = " \t\n\v\f\r");
 
 /**
+ * Removes additional whitespace from a string
+ */
+std::string removeExtraWhitespace(const std::string & str);
+
+/**
  * Python like split functions for strings.
  *
  * NOTE: This is similar to the tokenize function, but it maintains empty items, which tokenize does
@@ -771,7 +776,7 @@ expandAllMatches(const std::vector<T> & candidates, std::vector<T> & patterns)
 /**
  * This function will split the passed in string on a set of delimiters appending the substrings
  * to the passed in vector.  The delimiters default to "/" but may be supplied as well.  In
- * addition if min_len is supplied, the minimum token length will be greater than the supplied
+ * addition if min_len is supplied, the minimum token length will be >= than the supplied
  * value. T should be std::string or a MOOSE derived string class.
  */
 template <typename T>
@@ -781,6 +786,23 @@ tokenize(const std::string & str,
          unsigned int min_len = 1,
          const std::string & delims = "/")
 {
+  // elements.clear();
+
+  // bool in_token = false;
+  // std::string::size_type last_pos = 0;
+  // while (last_pos <= str.length())
+  // {
+  //   // Find the next delimiter
+  //   auto pos = str.find_first_of(delims, last_pos);
+  //   // Found the end of the string, so set the position to the end
+  //   if (pos == std::string::npos)
+  //     pos = str.length();
+  //   // Append an entry if it is long enough
+  //   if ((pos - last_pos) >= min_len)
+  //     elements.push_back(str.substr(last_pos, pos - last_pos));
+  //   // Skip to the next value
+  //   last_pos = pos + 1;
+  // }
   elements.clear();
 
   std::string::size_type last_pos = str.find_first_not_of(delims, 0);
@@ -926,6 +948,17 @@ concatenate(std::vector<T> c1, const T & item)
   c1.push_back(item);
   return c1;
 }
+
+/**
+ * Concatenates \p value into a single string separated by \p separator
+ */
+std::string stringJoin(const std::vector<std::string> & values,
+                       const std::string & separator = " ");
+
+/**
+ * @return Whether or not \p value begins with \p begin_value
+ */
+bool beginsWith(const std::string & value, const std::string & begin_value);
 
 /**
  * Return the number of digits for a number.
