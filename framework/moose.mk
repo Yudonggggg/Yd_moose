@@ -59,6 +59,12 @@ $(hit_objects): | prebuild
 pyhit_srcfiles  := $(hit_srcdir)/hit.cpp $(hit_srcdir)/lex.cc $(hit_srcdir)/parse.cc $(hit_srcdir)/braceexpr.cc
 
 #
+# capabilities python bindings
+#
+CAPABILITIES_DIR ?= $(MOOSE_DIR)/framework/contrib/capabilities
+capabilities_srcfiles := $(CAPABILITIES_DIR)/capabilities.C $(MOOSE_DIR)/framework/src/utils/CapabilityUtils.C
+
+#
 # Dynamic library suffix
 #
 lib_suffix := so
@@ -128,19 +134,29 @@ endif
 UNAME10 := $(shell uname | cut -c-10)
 ifeq ($(UNAME10), MINGW64_NT)
 	libmesh_LDFLAGS    += -no-undefined
-	pyhit_LIB          := $(HIT_DIR)/hit.pyd
-	pyhit_COMPILEFLAGS := $(shell $(pyconfig) --cflags --ldflags --libs)
+	PYMOD_EXTENSION    := pyd
+	PYMOD_COMPILEFLAGS := $(shell $(pyconfig) --cflags --ldflags --libs)
 else
-	pyhit_LIB          := $(HIT_DIR)/hit.so
-	pyhit_COMPILEFLAGS := -L$(shell $(pyconfig) --prefix)/lib $(shell $(pyconfig) --includes)
+	PYMOD_EXTENSION    := so
+	PYMOD_COMPILEFLAGS := -L$(shell $(pyconfig) --prefix)/lib $(shell $(pyconfig) --includes)
 endif
-pyhit_COMPILEFLAGS += $(wasp_CXXFLAGS) $(wasp_LDFLAGS)
 
 $(pyhit_srcfiles) $(hit_CLI_srcfiles): | prebuild
+
+pyhit_LIB          := $(HIT_DIR)/hit.$(PYMOD_EXTENSION)
+pyhit_COMPILEFLAGS += $(PYMOD_COMPILEFLAGS) $(wasp_CXXFLAGS) $(wasp_LDFLAGS)
+
 hit $(pyhit_LIB) $(hit_CLI): $(pyhit_srcfiles) $(hit_CLI_srcfiles)
 	@echo "Building and linking "$@"..."
 	@bash -c '(cd "$(HIT_DIR)" && $(libmesh_CXX) -I$(HIT_DIR)/include -std=c++17 -w -fPIC -lstdc++ -shared $^ $(pyhit_COMPILEFLAGS) $(DYNAMIC_LOOKUP) -o $(pyhit_LIB))'
 	@bash -c '(cd "$(HIT_DIR)" && $(MAKE))'
+
+capabilities_LIB          := $(CAPABILITIES_DIR)/capabilities.$(PYMOD_EXTENSION)
+capabilities_COMPILEFLAGS += $(PYMOD_COMPILEFLAGS)
+
+capabilities $(capabilities_LIB) : $(capabilities_srcfiles)
+	@echo "Building and linking "$@"..."
+	@bash -c '(cd "$(CAPABILITIES_DIR)" && $(libmesh_CXX) -std=c++17 -w -fPIC -lstdc++ -shared $^ $(capabilities_COMPILEFLAGS) $(DYNAMIC_LOOKUP) -o $(capabilities_LIB))'
 
 #
 # gtest
