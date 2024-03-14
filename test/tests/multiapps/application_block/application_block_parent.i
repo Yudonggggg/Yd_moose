@@ -7,10 +7,14 @@
   solve = false
 []
 
-[Postprocessors]
-[]
-
 [Executioner]
   type = Steady
+[]
+
+[MultiApps]
+  [sub]
+    type = FullSolveMultiApp
+    input_files = application_block_sub_base.i
+  []
 []
 

@@ -92,6 +92,24 @@ public:
 
   static InputParameters validParams();
 
+  /**
+   * Adds the app type parameters into \p params.
+   *
+   * This is separate because in MooseMain we will parse the type
+   * early to instantiate the correct app.
+   */
+  static void addTypeParam(InputParameters & params);
+  /**
+   * Adds the input file parameter into \p params.
+   *
+   * This is separate because in MooseMain we will parse the input
+   * file from command-line early so that we can parse the input
+   * to parse Application/type.
+   */
+  static void addInputFileParam(InputParameters & params);
+
+  MooseApp(InputParameters parameters);
+
   virtual ~MooseApp();
 
   TheWarehouse & theWarehouse() { return *_the_warehouse; }
@@ -130,7 +148,7 @@ public:
    * MooseTestApp).
    * @return The the type of the object
    */
-  const std::string & type() const;
+  const std::string & type() const { return _type; }
 
   /**
    * The RankMap is a useful object for determining how the processes
@@ -352,7 +370,8 @@ public:
    * Deprecated helper function to link the new added Builder back to Parser. This function will be
    *removed after new Parser and builder are merged
    **/
-  Moose::Builder & parser();
+  Parser & parser();
+  const Parser & parser() const;
 
 private:
   /**
@@ -1050,8 +1069,6 @@ public:
   template <class T>
   const std::vector<T *> & getInterfaceObjects() const;
 
-  static void addAppParam(InputParameters & params);
-
 protected:
   /**
    * Helper method for dynamic loading of objects
@@ -1065,9 +1082,6 @@ protected:
   void loadLibraryAndDependencies(const std::string & library_filename,
                                   const Parameters & params,
                                   bool load_dependencies = true);
-
-  /// Constructor is protected so that this object is constructed through the AppFactory object
-  MooseApp(InputParameters parameters);
 
   /**
    * NOTE: This is an internal function meant for MOOSE use only!

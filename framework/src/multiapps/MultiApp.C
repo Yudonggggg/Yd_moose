@@ -31,7 +31,7 @@
 #include "Transient.h"
 #include "Backup.h"
 #include "Parser.h"
-
+#include "AppBuilder.h"
 #include "libmesh/mesh_tools.h"
 #include "libmesh/numeric_vector.h"
 
@@ -252,8 +252,7 @@ MultiApp::MultiApp(const InputParameters & parameters)
     Restartable(this, "MultiApps"),
     PerfGraphInterface(this, std::string("MultiApp::") + _name),
     _fe_problem(*getCheckedPointerParam<FEProblemBase *>("_fe_problem_base")),
-    _app_type(isParamValid("app_type") ? std::string(getParam<MooseEnum>("app_type"))
-                                       : _fe_problem.getMooseApp().type()),
+    _app_type(isParamValid("app_type") ? std::string(getParam<MooseEnum>("app_type")) : ""),
     _use_positions(getParam<bool>("use_positions")),
     _input_files(getParam<std::vector<FileName>>("input_files")),
     _wait_for_first_app_init(getParam<bool>("wait_for_first_app_init")),
@@ -373,13 +372,6 @@ MultiApp::createApps()
 
   _apps.resize(_my_num_apps);
 
-  // If the user provided an unregistered app type, see if we can load it dynamically
-  if (!AppFactory::instance().isRegistered(_app_type))
-    _app.dynamicAppRegistration(_app_type,
-                                getParam<std::string>("library_path"),
-                                getParam<std::string>("library_name"),
-                                getParam<bool>("library_load_dependencies"));
-
   bool rank_did_quiet_init = false;
   unsigned int local_app = libMesh::invalid_uint;
   if (_wait_for_first_app_init)
@@ -406,7 +398,6 @@ void
 MultiApp::createLocalApp(const unsigned int i)
 {
   createApp(i, _global_time_offset);
-  _app.builder().hitCLIFilter(_apps[i]->name(), _app.commandLine()->getArguments());
 }
 
 void
@@ -1064,29 +1055,71 @@ MultiApp::createApp(unsigned int i, Real start_time)
   else
     full_name = multiapp_name;
 
-  InputParameters app_params = AppFactory::instance().getValidParams(_app_type);
+  // Build the CommandLine with the relevant options for this subapp and add the
+  // cli args from the input file
+  std::vector<std::string> input_cli_args;
+  if (cliArgs().size() > 0 || _cli_args_from_file.size() > 0)
+    input_cli_args = getCommandLineArgs(i);
+  // This will mark all hit CLI command line parameters that are passed to subapps
+  // as used within the parent app (_app)
+  auto app_cli = _app.commandLine()->initSubAppCommandLine(name(), multiapp_name, input_cli_args);
+  app_cli->parse();
+
+  // If only one input file was provided, use it for all the solves
+  const auto input_index = _input_files.size() == 1 ? 0 : _first_local_app + i;
+  const auto & input_file = _input_files[input_index];
+
+  // Don't let someone set Application/type= via command line
+  if (app_cli->hasHitParam("Application/type"))
+    mooseError("The command line parameter 'Application/type' is set for subapp '",
+               full_name,
+               "'\n\nThis is not supported.\n\nSet Application/type within '",
+               input_file,
+               "' instead.");
+
+  // create new parser tree for the application and parse
+  auto parser = std::make_unique<Parser>(input_file);
+
+  // Determine the application type
+  std::string app_type;
+  if (input_file.size())
+  {
+    parser->parse();
+    const auto & input_app_type_ptr = parser->getInputAppType();
+    if (input_app_type_ptr)
+    {
+      app_type = *input_app_type_ptr;
+      if (_app_type.size())
+        paramWarning("app_type",
+                     "This parameter is redundant because 'Application/type=",
+                     *input_app_type_ptr,
+                     "' is set in '",
+                     input_file,
+                     "'");
+    }
+    else if (_app_type.size())
+      app_type = _app_type;
+    else
+      app_type = _app.type();
+
+    if (!AppFactory::instance().isRegistered(app_type))
+      _app.dynamicAppRegistration(app_type,
+                                  getParam<std::string>("library_path"),
+                                  getParam<std::string>("library_name"),
+                                  getParam<bool>("library_load_dependencies"));
+  }
+
+  InputParameters app_params = AppFactory::instance().getValidParams(app_type);
+  app_params.set<std::string>("_type") = app_type;
+  app_params.set<std::shared_ptr<CommandLine>>("_command_line") = std::move(app_cli);
+  Moose::AppBuilder app_builder(std::move(parser));
+  app_builder.buildParamsFromCommandLine(full_name, app_params, _my_comm);
+
   app_params.set<FEProblemBase *>("_parent_fep") = &_fe_problem;
   app_params.set<std::unique_ptr<Backup> *>("_initial_backup") = &_sub_app_backups[i];
 
-  // Set the command line parameters with a copy of the main application command line parameters,
-  // the copy is required so that the addArgument command below doesn't accumulate more and more
-  // of the same cli_args, which is important when running in batch mode.
-  std::shared_ptr<CommandLine> app_cli = std::make_shared<CommandLine>(*_app.commandLine());
-
-  if (cliArgs().size() > 0 || _cli_args_from_file.size() > 0)
-  {
-    for (const std::string & str : MooseUtils::split(getCommandLineArgsParamHelper(i), ";"))
-    {
-      std::ostringstream oss;
-      oss << full_name << ":" << str;
-      app_cli->addArgument(oss.str());
-    }
-  }
-  app_cli->initForMultiApp(full_name);
-  app_params.set<std::shared_ptr<CommandLine>>("_command_line") = app_cli;
-
   if (_fe_problem.verboseMultiApps())
-    _console << COLOR_CYAN << "Creating MultiApp " << name() << " of type " << _app_type
+    _console << COLOR_CYAN << "Creating MultiApp " << name() << " of type " << app_type
              << " of level " << _app.multiAppLevel() + 1 << " and number " << _first_local_app + i
              << " on processor " << processor_id() << " with full name " << full_name
              << COLOR_DEFAULT << std::endl;
@@ -1103,38 +1136,7 @@ MultiApp::createApp(unsigned int i, Real start_time)
       app_params.set<const MooseMesh *>("_master_displaced_mesh") = &displaced_problem->mesh();
   }
 
-  // If only one input file was provided, use it for all the solves
-  const auto input_index = _input_files.size() == 1 ? 0 : _first_local_app + i;
-  const auto & input_file = _input_files[input_index];
-
-  // create new parser tree for the application and parse
-  auto parser = std::make_unique<Parser>(input_file);
-
-  if (input_file.size())
-  {
-    parser->parse();
-    const auto & app_type = parser->getAppType();
-    if (app_type.empty() && _app_type.empty())
-      mooseWarning("The application type is not specified for ",
-                   full_name,
-                   ". Please use [Application] block to specify the application type.");
-    if (!app_type.empty() && app_type != _app_type &&
-        !AppFactory::instance().isRegistered(app_type))
-      mooseError("In the ",
-                 full_name,
-                 ", '",
-                 app_type,
-                 "' is not a registered application. The registered application is named: '",
-                 _app_type,
-                 "'. Please double check the [Application] block to make sure the correct "
-                 "application is provided. \n");
-  }
-
-  if (parser->getAppType().empty())
-    parser->setAppType(_app_type);
-
-  app_params.set<std::shared_ptr<Parser>>("_parser") = std::move(parser);
-  _apps[i] = AppFactory::instance().createShared(_app_type, full_name, app_params, _my_comm);
+  _apps[i] = AppFactory::instance().createShared(app_params);
   auto & app = _apps[i];
 
   app->setGlobalTimeOffset(start_time);
@@ -1187,23 +1189,55 @@ MultiApp::createApp(unsigned int i, Real start_time)
   }
 }
 
-std::string
-MultiApp::getCommandLineArgsParamHelper(unsigned int local_app)
+std::vector<std::string>
+MultiApp::getCommandLineArgs(const unsigned int local_app)
 {
-  auto cla = cliArgs();
+  const auto cla = cliArgs();
+  auto cli_args_param = _cli_args_param;
+  std::string combined_args;
 
-  mooseAssert(cla.size() || _cli_args_from_file.size(), "There is no commandLine argument \n");
-
-  // Single set of "cli_args" to be applied to all sub apps
+  // Single set of args from cliArgs() to be provided to all apps
   if (cla.size() == 1)
-    return cla[0];
+    combined_args = cla[0];
+  // Single "cli_args_files" file to be provided to all apps
   else if (_cli_args_from_file.size() == 1)
-    return _cli_args_from_file[0];
+  {
+    cli_args_param = "cli_args_files";
+    combined_args = _cli_args_from_file[0];
+  }
+  // Unique set of args from cliArgs() to be provided to each app
   else if (cla.size())
-    // Unique set of "cli_args" to be applied to each sub apps
-    return cla[local_app + _first_local_app];
+    combined_args = cla[local_app + _first_local_app];
+  // Unique set of args from "cli_args_files" to be provided to all apps
   else
-    return _cli_args_from_file[local_app + _first_local_app];
+  {
+    cli_args_param = "cli_args_files";
+    combined_args = _cli_args_from_file[local_app + _first_local_app];
+  }
+
+  // Remove all of the beginning and end whitespace so we can recognize truly empty
+  combined_args = MooseUtils::trim(combined_args);
+
+  // MooseUtils::split will return a single empty entry if there is nothing,
+  // so exit early if we have nothing
+  if (combined_args.empty())
+    return {};
+
+  // Split the argument into a vector of arguments, and make sure
+  // that we don't have any empty arguments
+  auto args = MooseUtils::split(combined_args, ";");
+  for (const auto & arg : args)
+    if (arg.empty())
+    {
+      const auto error = "An empty MultiApp command line argument was provided. Your "
+                         "combined command line string has a ';' with no argument after it.";
+      if (cli_args_param)
+        paramError(*cli_args_param, error);
+      else
+        mooseError(error);
+    }
+
+  return args;
 }
 
 LocalRankConfig
@@ -1361,6 +1395,14 @@ MultiApp::setAppOutputFileBase()
 {
   for (unsigned int i = 0; i < _my_num_apps; ++i)
     setAppOutputFileBase(i);
+}
+
+std::vector<std::string>
+MultiApp::cliArgs() const
+{
+  // So that we can error out with paramError("cli_args", ...);
+  _cli_args_param = "cli_args";
+  return std::vector<std::string>(_cli_args.begin(), _cli_args.end());
 }
 
 void

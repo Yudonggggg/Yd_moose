@@ -47,7 +47,7 @@ FuncParseEvaler::eval(hit::Field * n, const std::list<std::string> & args, hit::
   auto ret = fp.ParseAndDeduceVariables(func_text, var_names);
   if (ret != -1)
   {
-    exp.errors.push_back(hit::errormsg(n, "fparse error: ", fp.ErrorMsg()));
+    exp.errors.emplace_back(*n, "fparse error: ", fp.ErrorMsg());
     return n->val();
   }
 
@@ -69,8 +69,8 @@ FuncParseEvaler::eval(hit::Field * n, const std::list<std::string> & args, hit::
     }
 
     if (curr == nullptr)
-      exp.errors.push_back(hit::errormsg(
-          n, "\n    no variable '", var, "' found for use in function parser expression"));
+      exp.errors.emplace_back(
+          *n, "no variable '", var, "' found for use in function parser expression");
   }
 
   if (exp.errors.size() != n_errs)
@@ -102,10 +102,10 @@ UnitsConversionEvaler::eval(hit::Field * n,
   // conversion
   if (argv.size() != 4 || (argv.size() >= 3 && argv[2] != "->"))
   {
-    exp.errors.push_back(
-        hit::errormsg(n,
-                      "units error: Expected 4 arguments ${units number from_unit -> to_unit} or "
-                      "2 arguments  ${units number unit}"));
+    exp.errors.emplace_back(
+        *n,
+        "units error: Expected 4 arguments ${units number from_unit -> to_unit} or "
+        "2 arguments  ${units number unit}");
     return n->val();
   }
 
@@ -114,16 +114,16 @@ UnitsConversionEvaler::eval(hit::Field * n,
   auto to_unit = MooseUnits(argv[3]);
   if (!from_unit.conformsTo(to_unit))
   {
-    exp.errors.push_back(hit::errormsg(n,
-                                       "units error: ",
-                                       argv[1],
-                                       " (",
-                                       from_unit,
-                                       ") does not convert to ",
-                                       argv[3],
-                                       " (",
-                                       to_unit,
-                                       ")"));
+    exp.errors.emplace_back(*n,
+                            "units error: ",
+                            argv[1],
+                            " (",
+                            from_unit,
+                            ") does not convert to ",
+                            argv[3],
+                            " (",
+                            to_unit,
+                            ")");
     return n->val();
   }
 
@@ -152,15 +152,12 @@ UnitsConversionEvaler::eval(hit::Field * n,
 }
 
 Parser::Parser(const std::vector<std::string> & input_filenames)
-  : _root(nullptr), _input_filenames(input_filenames), _input_text(), _app_type(std::string())
+  : _input_filenames(input_filenames), _input_text(), _root(nullptr)
 {
 }
 
 Parser::Parser(const std::string & input_filename, const std::optional<std::string> & input_text)
-  : _root(nullptr),
-    _input_filenames({input_filename}),
-    _input_text(input_text),
-    _app_type(std::string())
+  : _input_filenames({input_filename}), _input_text(input_text), _root(nullptr)
 {
 }
 
@@ -219,8 +216,7 @@ BadActiveWalker ::walk(const std::string & /*fullpath*/,
   if (actives && inactives && actives->type() == hit::NodeType::Field &&
       inactives->type() == hit::NodeType::Field && actives->parent() == inactives->parent())
   {
-    errors.push_back(
-        hit::errormsg(section, "'active' and 'inactive' parameters both provided in section"));
+    errors.emplace_back(*section, "'active' and 'inactive' parameters both provided in section");
     return;
   }
 
@@ -237,12 +233,12 @@ BadActiveWalker ::walk(const std::string & /*fullpath*/,
     if (msg.size() > 0)
     {
       msg = msg.substr(0, msg.size() - 2);
-      errors.push_back(hit::errormsg(section,
-                                     "variables listed as active (",
-                                     msg,
-                                     ") in section '",
-                                     section->fullpath(),
-                                     "' not found in input"));
+      errors.emplace_back(*section,
+                          "variables listed as active (",
+                          msg,
+                          ") in section '",
+                          section->fullpath(),
+                          "' not found in input");
     }
   }
   // ensures we don't recheck deeper nesting levels
@@ -258,23 +254,14 @@ BadActiveWalker ::walk(const std::string & /*fullpath*/,
     if (msg.size() > 0)
     {
       msg = msg.substr(0, msg.size() - 2);
-      errors.push_back(hit::errormsg(section,
-                                     "variables listed as inactive (",
-                                     msg,
-                                     ") in section '",
-                                     section->fullpath(),
-                                     "' not found in input"));
+      errors.emplace_back(*section,
+                          "variables listed as inactive (",
+                          msg,
+                          ") in section '",
+                          section->fullpath(),
+                          "' not found in input");
     }
   }
-}
-
-void
-FindAppWalker ::walk(const std::string & /*fullpath*/,
-                     const std::string & /*nodepath*/,
-                     hit::Node * n)
-{
-  if (n && n->type() == hit::NodeType::Field && n->fullpath() == "Application/type")
-    _app_type = n->param<std::string>();
 }
 
 const std::string &
@@ -288,7 +275,14 @@ Parser::getLastInputFileName() const
 void
 Parser::parse()
 {
-  _root.reset();
+  mooseAssert(!_root, "Already parsed");
+
+  // Having no input is valid; we can still merge hit CLI input later
+  if (getInputFileNames().empty())
+  {
+    _root.reset(hit::parse("empty", ""));
+    return;
+  }
 
   if (_input_text)
     mooseAssert(getInputFileNames().size() == 1,
@@ -331,28 +325,29 @@ Parser::parse()
       // provide stream to hit parse function to capture any syntax errors,
       // set parser root node, then throw those errors if any were captured
       std::stringstream input_errors;
-      std::unique_ptr<hit::Node> root(hit::parse(corrected_filename, input, &input_errors));
-      hit::explode(root.get());
+      std::unique_ptr<hit::Node> corrected_root(
+          hit::parse(corrected_filename, input, &input_errors));
+      hit::explode(corrected_root.get());
       DupParamWalker dw;
-      root->walk(&dw, hit::NodeType::Field);
-      if (!_root)
-        _root = std::move(root);
+      corrected_root->walk(&dw, hit::NodeType::Field);
+      if (!hasParsed())
+        _root = std::move(corrected_root);
       else
       {
-        root->walk(&opw, hit::NodeType::Field);
-        hit::merge(root.get(), _root.get());
+        corrected_root->walk(&opw, hit::NodeType::Field);
+        hit::merge(corrected_root.get(), &root());
       }
 
       if (!input_errors.str().empty())
-        throw hit::ParseError(input_errors.str());
+        throw hit::ParseException(input_errors.str());
 
       for (auto & msg : dw.errors)
         errmsg += msg + "\n";
 
       dw_errmsg.push_back(errmsg);
-      _root->walk(&cpw, hit::NodeType::Field);
+      root().walk(&cpw, hit::NodeType::Field);
     }
-    catch (hit::ParseError & err)
+    catch (hit::ParseException & err)
     {
       mooseError(err.what());
     }
@@ -362,18 +357,6 @@ Parser::parse()
   if (!opw.warnings.empty())
     mooseInfo(Moose::stringify(opw.warnings), "\n");
 
-  // do as much error checking as early as possible so that errors are more useful instead
-  // of surprising and disconnected from what caused them.
-  BadActiveWalker bw;
-  _root->walk(&bw, hit::NodeType::Section);
-
-  FindAppWalker fw;
-  _root->walk(&fw, hit::NodeType::Field);
-  _app_type = fw.getApp();
-
-  for (auto & msg : bw.errors)
-    errmsg += msg + "\n";
-
   // Print parse errors related to bad active early
   if (errmsg.size() > 0)
     mooseError(errmsg);
@@ -381,4 +364,17 @@ Parser::parse()
   for (auto & msg : dw_errmsg)
     if (msg.size() > 0)
       mooseError(msg);
+
+  // Get the application type while we're here
+  if (const auto node = root().find("Application/type"))
+    if (node->type() == hit::NodeType::Field)
+      _input_app_type = node->param<std::string>();
+}
+
+hit::Node &
+Parser::root()
+{
+  if (!hasParsed())
+    mooseError("Getting Parser::root() before parsing with Parser::parse()");
+  return *_root;
 }

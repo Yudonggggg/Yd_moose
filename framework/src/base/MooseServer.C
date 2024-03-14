@@ -8,8 +8,10 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MooseServer.h"
+#include "MooseApp.h"
 #include "Moose.h"
 #include "AppFactory.h"
+#include "AppBuilder.h"
 #include "Syntax.h"
 #include "ActionFactory.h"
 #include "Factory.h"
@@ -20,9 +22,12 @@
 #include "ExecFlagEnum.h"
 #include "JsonSyntaxTree.h"
 #include "FileLineInfo.h"
+#include "CommandLine.h"
+
 #include "pcrecpp.h"
 #include "hit.h"
 #include "waspcore/utils.h"
+
 #include <algorithm>
 #include <vector>
 #include <sstream>
@@ -56,38 +61,8 @@ MooseServer::parseDocumentForDiagnostics(wasp::DataArray & diagnosticsList)
   std::string parse_file_path = document_path;
   pcrecpp::RE("(.*://)(.*)").Replace("\\2", &parse_file_path);
 
-  // copy parent application parameters and modify to set up input check
-  InputParameters app_params = _moose_app.parameters();
-  app_params.set<bool>("check_input") = true;
-  app_params.set<bool>("error_unused") = true;
-  app_params.set<bool>("error") = true;
-  app_params.set<bool>("error_deprecated") = true;
-  app_params.set<std::string>("color") = "off";
-  app_params.set<bool>("disable_perf_graph_live") = true;
-  app_params.set<std::shared_ptr<Parser>>("_parser") =
-      std::make_shared<Parser>(parse_file_path, document_text);
-
-  app_params.remove("language_server");
-
-  // turn output off so input check application does not affect messages
-  std::streambuf * cached_output_buffer = Moose::out.rdbuf(nullptr);
-
-  // create new application with parameters modified for input check run
-  _check_apps[document_path] = AppFactory::instance().createShared(
-      _moose_app.type(), _moose_app.name(), app_params, _moose_app.getCommunicator()->get());
-
-  // disable logs and enable error exceptions with initial values cached
-  bool cached_throw_on_error = Moose::_throw_on_error;
-  Moose::_throw_on_error = true;
-
   bool pass = true;
-
-  // run input check application converting caught errors to diagnostics
-  try
-  {
-    getCheckApp()->run();
-  }
-  catch (std::exception & err)
+  auto catch_err = [this, &pass, &parse_file_path, &diagnosticsList](auto & err)
   {
     int line_number = 1;
     int column_number = 1;
@@ -144,6 +119,80 @@ MooseServer::parseDocumentForDiagnostics(wasp::DataArray & diagnosticsList)
                                                "check_inp",
                                                error_line);
     }
+  };
+
+  auto add_hit_error = [this, &pass, &diagnosticsList](auto & hit_error)
+  {
+    diagnosticsList.push_back(wasp::DataObject());
+    wasp::DataObject * diagnostic = diagnosticsList.back().to_object();
+    pass &= wasp::lsp::buildDiagnosticObject(*diagnostic,
+                                             errors,
+                                             hit_error.node().line() - 1,
+                                             hit_error.node().column() - 1,
+                                             hit_error.node().line() - 1,
+                                             hit_error.node().column() - 1,
+                                             1,
+                                             "moose_srv",
+                                             "check_inp",
+                                             hit_error.message());
+  };
+
+  // Construct the parser and parse
+  auto & check_data = _check_data[document_path];
+  check_data.parser = std::make_shared<Parser>(parse_file_path, document_text);
+  check_data.app = nullptr;
+  // Initial parsing could throw
+  try
+  {
+    check_data.parser->parse();
+  }
+  catch (std::exception & err)
+  {
+    catch_err(err);
+  }
+
+  // Build the parameters for the application
+  // The AppBuilder does an initial walk and could throw values from the evalers,
+  // but those that do not affect the application's parameters will be caught
+  Moose::AppBuilder app_builder(check_data.parser, /* catch_parse_errors = */ true);
+  auto params = app_builder.buildParams(_moose_app.type(),
+                                        "check_" + _moose_app.name(),
+                                        _moose_app.parameters().get<int>("_argc"),
+                                        _moose_app.parameters().get<char **>("_argv"),
+                                        _moose_app.getCommunicator()->get());
+
+  // Add any parse errors that we have accumulated that don't apply to the Application
+  const auto & app_parse_errors = app_builder.getParseErrors();
+  for (auto & hit_error : app_parse_errors)
+    add_hit_error(hit_error);
+
+  // Set the parameters we need for this check app
+  params.set<bool>("check_input") = true;
+  params.set<bool>("error_unused") = true;
+  params.set<bool>("error") = true;
+  params.set<bool>("error_deprecated") = true;
+  params.set<MooseEnum>("color") = "off";
+  params.set<bool>("disable_perf_graph_live") = true;
+  params.set<bool>("language_server") = false;
+
+  // turn output off so input check application does not affect messages
+  std::streambuf * cached_output_buffer = Moose::out.rdbuf(nullptr);
+
+  // Disable logs and enable error exceptions with initial values cached
+  const bool cached_throw_on_error = Moose::_throw_on_error;
+  Moose::_throw_on_error = true;
+
+  // create new application with parameters modified for input check run
+  check_data.app = AppFactory::instance().createShared(params);
+
+  // run input check application converting caught errors to diagnostics
+  try
+  {
+    getCheckApp().run();
+  }
+  catch (std::exception & err)
+  {
+    catch_err(err);
   }
 
   // reset behaviors of performance logging and error exception throwing
@@ -175,7 +224,9 @@ MooseServer::gatherDocumentCompletionItems(wasp::DataArray & completionItems,
                                            int line,
                                            int character)
 {
-  // add only root level blocks to completion list when parser root is null
+  mooseAssert(queryCheckApp(), "Must have an app");
+
+  // add only root level blocks to completion list when app is not available
   if (!rootIsValid())
     return addSubblocksToList(completionItems, "/", line, character, line, character, "", false);
 
@@ -357,8 +408,8 @@ MooseServer::getActionParameters(InputParameters & valid_params,
                                  const std::string & object_path,
                                  std::set<std::string> & obj_act_tasks)
 {
-  Syntax & syntax = getCheckApp()->syntax();
-  ActionFactory & action_factory = getCheckApp()->getActionFactory();
+  Syntax & syntax = getCheckApp().syntax();
+  ActionFactory & action_factory = getCheckApp().getActionFactory();
 
   // get registered syntax path identifier using actual object context path
   bool is_parent;
@@ -402,8 +453,8 @@ MooseServer::getObjectParameters(InputParameters & valid_params,
                                  std::string object_type,
                                  const std::set<std::string> & obj_act_tasks)
 {
-  Syntax & syntax = getCheckApp()->syntax();
-  Factory & factory = getCheckApp()->getFactory();
+  Syntax & syntax = getCheckApp().syntax();
+  Factory & factory = getCheckApp().getFactory();
 
   // use type parameter default if it exists and is not provided from input
   if (object_type.empty() && valid_params.have_parameter<std::string>("type") &&
@@ -570,7 +621,7 @@ MooseServer::addSubblocksToList(wasp::DataArray & completionItems,
                                 const std::string & filtering_prefix,
                                 bool request_on_block_decl)
 {
-  Syntax & syntax = getCheckApp()->syntax();
+  Syntax & syntax = getCheckApp().syntax();
 
   // set used to prevent reprocessing syntax paths for more than one action
   std::set<std::string> syntax_paths_processed;
@@ -669,8 +720,8 @@ MooseServer::addValuesToList(wasp::DataArray & completionItems,
                              int replace_line_end,
                              int replace_char_end)
 {
-  Syntax & syntax = getCheckApp()->syntax();
-  Factory & factory = getCheckApp()->getFactory();
+  Syntax & syntax = getCheckApp().syntax();
+  Factory & factory = getCheckApp().getFactory();
 
   // get clean type for path associations and basic type for boolean values
   std::string dirty_type = valid_params.type(param_name);
@@ -839,8 +890,6 @@ MooseServer::gatherDocumentDefinitionLocations(wasp::DataArray & definitionLocat
                                                int line,
                                                int character)
 {
-  Factory & factory = getCheckApp()->getFactory();
-
   // return without any definition locations added when parser root is null
   if (!rootIsValid())
     return true;
@@ -853,6 +902,12 @@ MooseServer::gatherDocumentDefinitionLocations(wasp::DataArray & definitionLocat
   // return without any definition locations added when node not value type
   if (request_context.type() != wasp::VALUE)
     return true;
+
+  auto app_ptr = queryCheckApp();
+  if (!app_ptr)
+    return true;
+
+  Factory & factory = app_ptr->getFactory();
 
   // get name of parameter node parent of value and value string from input
   std::string param_name = request_context.has_parent() ? request_context.parent().name() : "";
@@ -942,7 +997,7 @@ MooseServer::getInputLookupDefinitionNodes(SortedLocationNodes & location_nodes,
                                            const std::string & clean_type,
                                            const std::string & val_string)
 {
-  Syntax & syntax = getCheckApp()->syntax();
+  Syntax & syntax = getCheckApp().syntax();
 
   // build map from parameter types to input lookup paths and save to reuse
   if (_type_to_input_paths.empty())
@@ -1100,7 +1155,8 @@ MooseServer::gatherDocumentReferencesLocations(wasp::DataArray & /* referencesLo
 {
   bool pass = true;
 
-  // TODO - hook up this capability by adding server specific logic here
+  // TODO - hook up this capability by adding server
+  // specific logic here
 
   return pass;
 }
@@ -1110,23 +1166,27 @@ MooseServer::gatherDocumentFormattingTextEdits(wasp::DataArray & formattingTextE
                                                int tab_size,
                                                bool /* insert_spaces */)
 {
-  // return without adding any formatting text edits if parser root is null
+  // return without adding any formatting text edits
+  // if parser root is null
   if (!rootIsValid())
     return true;
 
-  // get input root node line and column range to represent entire document
+  // get input root node line and column range to
+  // represent entire document
   wasp::HITNodeView view_root = getRoot().getNodeView();
   int document_start_line = view_root.line() - 1;
   int document_start_char = view_root.column() - 1;
   int document_last_line = view_root.last_line() - 1;
   int document_last_char = view_root.last_column();
 
-  // set number of spaces for indentation and build formatted document text
+  // set number of spaces for indentation and build
+  // formatted document text
   _formatting_tab_size = tab_size;
   std::size_t starting_line = view_root.line() - 1;
   std::string document_format = formatDocument(view_root, starting_line, 0);
 
-  // add formatted text with whole line and column range to formatting list
+  // add formatted text with whole line and column
+  // range to formatting list
   formattingTextEdits.push_back(wasp::DataObject());
   wasp::DataObject * item = formattingTextEdits.back().to_object();
   bool pass = wasp::lsp::buildTextEditObject(*item,
@@ -1142,43 +1202,53 @@ MooseServer::gatherDocumentFormattingTextEdits(wasp::DataArray & formattingTextE
 std::string
 MooseServer::formatDocument(wasp::HITNodeView parent, std::size_t & prev_line, std::size_t level)
 {
-  // build string of newline and indentation spaces from level and tab size
+  // build string of newline and indentation spaces
+  // from level and tab size
   std::string newline_indent = "\n" + std::string(level * _formatting_tab_size, ' ');
 
-  // lambda to format include data by replacing consecutive spaces with one
+  // lambda to format include data by replacing
+  // consecutive spaces with one
   auto collapse_spaces = [](std::string string_copy)
   {
     pcrecpp::RE("\\s+").Replace(" ", &string_copy);
     return string_copy;
   };
 
-  // formatted string that will be built recursively by appending each call
+  // formatted string that will be built recursively
+  // by appending each call
   std::string format_string;
 
-  // walk over all children of this node context and build formatted string
+  // walk over all children of this node context and
+  // build formatted string
   for (const auto i : make_range(parent.child_count()))
   {
-    // walk must be index based to catch file include and skip its children
+    // walk must be index based to catch file include
+    // and skip its children
     wasp::HITNodeView child = parent.child_at(i);
 
-    // add blank line if necessary after previous line and before this line
+    // add blank line if necessary after previous
+    // line and before this line
     std::string blank = child.line() > prev_line + 1 ? "\n" : "";
 
-    // format include directive with indentation and collapse extra spacing
+    // format include directive with indentation and
+    // collapse extra spacing
     if (wasp::is_nested_file(child))
       format_string += blank + newline_indent + MooseUtils::trim(collapse_spaces(child.data()));
 
-    // format normal comment with indentation and inline comment with space
+    // format normal comment with indentation and
+    // inline comment with space
     else if (child.type() == wasp::COMMENT)
       format_string += (child.line() == prev_line ? " " : blank + newline_indent) +
                        MooseUtils::trim(child.data());
 
-    // format object recursively with indentation and without legacy syntax
+    // format object recursively with indentation and
+    // without legacy syntax
     else if (child.type() == wasp::OBJECT)
       format_string += blank + newline_indent + "[" + child.name() + "]" +
                        formatDocument(child, prev_line, level + 1) + newline_indent + "[]";
 
-    // format keyed value with indentation and calling reusable hit methods
+    // format keyed value with indentation and
+    // calling reusable hit methods
     else if (child.type() == wasp::KEYED_VALUE || child.type() == wasp::ARRAY)
     {
       const std::string prefix = newline_indent + child.name() + " = ";
@@ -1190,18 +1260,21 @@ MooseServer::formatDocument(wasp::HITNodeView parent, std::size_t & prev_line, s
       format_string += blank + prefix + hit::formatValue(render_val, val_column, prefix_len);
     }
 
-    // set previous line reference used for blank lines and inline comments
+    // set previous line reference used for blank
+    // lines and inline comments
     prev_line = child.last_line();
   }
 
-  // remove leading newline if this is level zero returning entire document
+  // remove leading newline if this is level zero
+  // returning entire document
   return level != 0 ? format_string : format_string.substr(1);
 }
 
 bool
 MooseServer::gatherDocumentSymbols(wasp::DataArray & documentSymbols)
 {
-  // return prior to starting document symbol tree when parser root is null
+  // return prior to starting document symbol tree
+  // when parser root is null
   if (!rootIsValid())
     return true;
 
@@ -1209,13 +1282,16 @@ MooseServer::gatherDocumentSymbols(wasp::DataArray & documentSymbols)
 
   bool pass = true;
 
-  // walk over all children of root node context and build document symbols
+  // walk over all children of root node context and
+  // build document symbols
   for (const auto i : make_range(view_root.child_count()))
   {
-    // walk must be index based to catch file include and skip its children
+    // walk must be index based to catch file include
+    // and skip its children
     wasp::HITNodeView view_child = view_root.child_at(i);
 
-    // set up name, zero based line and column range, kind, and detail info
+    // set up name, zero based line and column range,
+    // kind, and detail info
     std::string name = view_child.name();
     int line = view_child.line() - 1;
     int column = view_child.column() - 1;
@@ -1227,7 +1303,8 @@ MooseServer::gatherDocumentSymbols(wasp::DataArray & documentSymbols)
             ? wasp::strip_quotes(hit::extractValue(view_child.first_child_by_name("type").data()))
             : "";
 
-    // build document symbol object from node child info and push to array
+    // build document symbol object from node child
+    // info and push to array
     documentSymbols.push_back(wasp::DataObject());
     wasp::DataObject * data_child = documentSymbols.back().to_object();
     pass &= wasp::lsp::buildDocumentSymbolObject(*data_child,
@@ -1245,7 +1322,8 @@ MooseServer::gatherDocumentSymbols(wasp::DataArray & documentSymbols)
                                                  last_line,
                                                  last_column);
 
-    // call method to recursively fill document symbols for each node child
+    // call method to recursively fill document
+    // symbols for each node child
     pass &= traverseParseTreeAndFillSymbols(view_child, *data_child);
   }
 
@@ -1256,19 +1334,23 @@ bool
 MooseServer::traverseParseTreeAndFillSymbols(wasp::HITNodeView view_parent,
                                              wasp::DataObject & data_parent)
 {
-  // return without adding any children if parent node is file include type
+  // return without adding any children if parent
+  // node is file include type
   if (wasp::is_nested_file(view_parent))
     return true;
 
   bool pass = true;
 
-  // walk over all children of this node context and build document symbols
+  // walk over all children of this node context and
+  // build document symbols
   for (const auto i : make_range(view_parent.child_count()))
   {
-    // walk must be index based to catch file include and skip its children
+    // walk must be index based to catch file include
+    // and skip its children
     wasp::HITNodeView view_child = view_parent.child_at(i);
 
-    // set up name, zero based line and column range, kind, and detail info
+    // set up name, zero based line and column range,
+    // kind, and detail info
     std::string name = view_child.name();
     int line = view_child.line() - 1;
     int column = view_child.column() - 1;
@@ -1280,7 +1362,8 @@ MooseServer::traverseParseTreeAndFillSymbols(wasp::HITNodeView view_parent,
             ? wasp::strip_quotes(hit::extractValue(view_child.first_child_by_name("type").data()))
             : "";
 
-    // build document symbol object from node child info and push to array
+    // build document symbol object from node child
+    // info and push to array
     wasp::DataObject & data_child = wasp::lsp::addDocumentSymbolChild(data_parent);
     pass &= wasp::lsp::buildDocumentSymbolObject(data_child,
                                                  errors,
@@ -1297,7 +1380,8 @@ MooseServer::traverseParseTreeAndFillSymbols(wasp::HITNodeView view_parent,
                                                  last_line,
                                                  last_column);
 
-    // call method to recursively fill document symbols for each node child
+    // call method to recursively fill document
+    // symbols for each node child
     pass &= traverseParseTreeAndFillSymbols(view_child, data_child);
   }
 
@@ -1310,8 +1394,9 @@ MooseServer::getCompletionItemKind(const InputParameters & valid_params,
                                    const std::string & clean_type,
                                    bool is_param)
 {
-  // set up completion item kind value that client may use for icon in list
-  auto associated_types = getCheckApp()->syntax().getAssociatedTypes();
+  // set up completion item kind value that client
+  // may use for icon in list
+  auto associated_types = getCheckApp().syntax().getAssociatedTypes();
   if (is_param && valid_params.isParamRequired(param_name) &&
       !valid_params.isParamValid(param_name))
     return wasp::lsp::m_comp_kind_event;
@@ -1338,7 +1423,8 @@ MooseServer::getCompletionItemKind(const InputParameters & valid_params,
 int
 MooseServer::getDocumentSymbolKind(wasp::HITNodeView symbol_node)
 {
-  // lambdas that check if parameter is a boolean or number for symbol kind
+  // lambdas that check if parameter is a boolean or
+  // number for symbol kind
   auto is_boolean = [](wasp::HITNodeView symbol_node)
   {
     bool convert;
@@ -1352,7 +1438,8 @@ MooseServer::getDocumentSymbolKind(wasp::HITNodeView symbol_node)
     return (iss >> convert && iss.eof());
   };
 
-  // set up document symbol kind value that client may use for outline icon
+  // set up document symbol kind value that client
+  // may use for outline icon
   if (symbol_node.type() == wasp::OBJECT)
     return wasp::lsp::m_symbol_kind_struct;
   else if (symbol_node.type() == wasp::FILE)
@@ -1374,22 +1461,74 @@ MooseServer::getDocumentSymbolKind(wasp::HITNodeView symbol_node)
 }
 
 bool
-MooseServer::rootIsValid() const
+MooseServer::rootIsValid()
 {
-  return getCheckApp() && getCheckApp()->builder().root() &&
-         !getCheckApp()->builder().root()->getNodeView().is_null();
+  if (const auto parser_ptr = queryCheckParser())
+    return parser_ptr->hasParsed() && !parser_ptr->root().getNodeView().is_null();
+  return false;
 }
 
 hit::Node &
 MooseServer::getRoot()
 {
   mooseAssert(rootIsValid(), "Not valid");
-  return *getCheckApp()->builder().root();
+  return getCheckParser().root();
 }
 
-std::shared_ptr<MooseApp>
-MooseServer::getCheckApp() const
+Parser &
+MooseServer::getCheckParser()
 {
-  mooseAssert(_check_apps.count(document_path), "No check app for path");
-  return _check_apps.at(document_path);
+  if (auto parser_ptr = queryCheckParser())
+    return *parser_ptr;
+
+  mooseError("Check parser is not available");
+}
+
+Parser *
+MooseServer::queryCheckParser()
+{
+  if (const auto check_data = queryCheckData())
+  {
+    if (check_data->parser && check_data->app)
+      mooseAssert(check_data->parser.get() == &check_data->app->parser(), "Inconsistent parser");
+    return check_data->parser.get();
+  }
+
+  return nullptr;
+}
+
+MooseApp &
+MooseServer::getCheckApp()
+{
+  if (auto app_ptr = queryCheckApp())
+    return *app_ptr;
+
+  mooseError("Check app is not available");
+}
+
+MooseApp *
+MooseServer::queryCheckApp()
+{
+  if (const auto check_data = queryCheckData())
+    return check_data->app.get();
+
+  return nullptr;
+}
+
+const MooseServer::CheckData &
+MooseServer::getCheckData()
+{
+  if (auto check_data = queryCheckData())
+    return *check_data;
+
+  mooseError("No check data for '", document_path, "'");
+}
+
+const MooseServer::CheckData *
+MooseServer::queryCheckData()
+{
+  if (const auto it = _check_data.find(document_path); it != _check_data.end())
+    return &it->second;
+
+  return nullptr;
 }
