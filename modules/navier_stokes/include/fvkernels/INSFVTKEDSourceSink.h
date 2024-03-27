@@ -81,6 +81,12 @@ protected:
   /// Map for the previous nonlienar iterate
   std::map<const Elem *, Real> _pevious_nl_sol;
 
+  /// Boolean for limiting the time scale
+  const bool _v2f_formulation;
+
+  /// Turbulent normal wall fluctuations
+  const Moose::Functor<ADReal> * _v2;
+
   ///@{
   /** Maps for wall treatment */
   std::map<const Elem *, bool> _wall_bounded;

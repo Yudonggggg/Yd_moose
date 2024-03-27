@@ -1,0 +1,23 @@
+[Tests]
+  design = 'INSFVTFSourceSink.md INSFVTKEDSourceSink.md INSFVTV2SourceSink.md INSFVTV2WallFunctionBC.md INSFVTFWallFunctionBC.md v2fViscosityAux.md SIMPLE.md'
+  issues = '#26610'
+  [BFS_ERCOFTAC_v2f]
+    requirement = 'The system shall be able to solve fluid flow problems with the v2f turbulence model for a backward facing step, '
+    [result]
+      type = 'Exodiff'
+      input = 'BFS_ERCOFTAC_v2f.i'
+      exodiff = 'BFS_ERCOFTAC_v2f_out.e'
+      detail = 'and reach converged results with segregated solvers,'
+      abs_zero = 1e-6
+      heavy = true
+    []
+    [run]
+      type = 'Exodiff'
+      input = 'BFS_ERCOFTAC_v2f.i'
+      exodiff = 'BFS_ERCOFTAC_v2f_short.e'
+      detail = 'and pass debugging checks.'
+      abs_zero = 1e-6
+      cli_args = 'Executioner/num_iterations=10 Outputs/file_base=BFS_ERCOFTAC_v2f_short'
+    []
+  []
+[]

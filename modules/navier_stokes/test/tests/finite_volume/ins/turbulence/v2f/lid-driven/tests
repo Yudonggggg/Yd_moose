@@ -1,0 +1,62 @@
+[Tests]
+  design = 'INSFVTFSourceSink.md INSFVTKEDSourceSink.md INSFVTV2SourceSink.md INSFVTV2WallFunctionBC.md INSFVTFWallFunctionBC.md v2fViscosityAux.md INSFVTurbulentTemperatureWallFunction.md SIMPLE.md'
+  issues = '#26610'
+  [lid_driven_v2f_turb_std_wall]
+    requirement = 'The system shall be able to run fluid flow with v2f turbulence model in enclosures with standard wall functions, '
+    [result]
+      type = 'Exodiff'
+      input = 'lid-driven-turb-std-wall.i'
+      exodiff = 'lid-driven-turb-std-wall_out.e'
+      detail = 'and reach converged results with segregated solvers.'
+      abs_zero = 1e-6
+      heavy = true
+    []
+    [run]
+      type = 'Exodiff'
+      input = 'lid-driven-turb-std-wall.i'
+      exodiff = 'lid_driven_turb_std_wall_short.e'
+      detail = 'and pass debugging checks.'
+      cli_args = 'Executioner/num_iterations=30 Outputs/file_base=lid_driven_turb_std_wall_short'
+      abs_zero = 1e-6
+    []
+  []
+  [lid_driven_v2f_turb_std_wall_NL]
+    requirement = 'The system shall be able to run fluid flow with v2f turbulence model in enclosures, '
+    [result]
+      type = 'Exodiff'
+      input = 'lid-driven-turb-std-wall-NL.i'
+      exodiff = 'lid-driven-turb-std-wall-NL_out.e'
+      detail = 'and reach converged results with segregated solvers with nonlinear solves.'
+      abs_zero = 1e-6
+      heavy = true
+    []
+    [run]
+      type = 'Exodiff'
+      input = 'lid-driven-turb-std-wall-NL.i'
+      exodiff = 'lid_driven_turb_std_wall_NL_short.e'
+      detail = 'and pass debugging checks with nonlinear solves.'
+      cli_args = 'Executioner/end_time=0.01 Outputs/file_base=lid_driven_turb_std_wall_NL_short'
+      abs_zero = 1e-6
+    []
+  []
+  [lid_driven_v2f_turb_std_wall_temp]
+    requirement = 'The system shall be able to run fluid flow with v2f turbulence model in enclosures with temperature wall functions, '
+    [result]
+      type = 'Exodiff'
+      input = 'lid-driven-turb-std-wall-temp.i'
+      exodiff = 'temperature_wall_function_log.e'
+      detail = 'and reach converged results with segregated solvers.'
+      cli_args = 'Outputs/file_base=temperature_wall_function_log'
+      abs_zero = 1e-6
+      heavy = true
+    []
+    [run]
+      type = 'Exodiff'
+      input = 'lid-driven-turb-std-wall-temp.i'
+      exodiff = 'temperature_wall_function_short.e'
+      detail = 'and pass debugging checks.'
+      cli_args = 'Executioner/num_iterations=30 Outputs/file_base=temperature_wall_function_short'
+      abs_zero = 1e-6
+    []
+  []
+[]

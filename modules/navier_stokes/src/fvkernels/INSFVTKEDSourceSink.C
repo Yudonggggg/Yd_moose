@@ -46,6 +46,10 @@ INSFVTKEDSourceSink::validParams()
   params.addParam<Real>("C2_eps", 1.92, "Second epsilon coefficient");
   params.addParam<Real>("C_mu", 0.09, "Coupled turbulent kinetic energy closure.");
 
+  params.addParam<bool>(
+      "v2f_formulation", false, "Boolean to limit the timescale for v2f formulation.");
+  params.addParam<MooseFunctorName>(NS::TV2, "Coupled turbulent wall normal fluctuations.");
+
   params.set<unsigned short>("ghost_layers") = 2;
   return params;
 }
@@ -66,13 +70,18 @@ INSFVTKEDSourceSink::INSFVTKEDSourceSink(const InputParameters & params)
     _non_equilibrium_treatment(getParam<bool>("non_equilibrium_treatment")),
     _C1_eps(getParam<Real>("C1_eps")),
     _C2_eps(getParam<Real>("C2_eps")),
-    _C_mu(getParam<Real>("C_mu"))
+    _C_mu(getParam<Real>("C_mu")),
+    _v2f_formulation(getParam<bool>("v2f_formulation")),
+    _v2(params.isParamValid(NS::TV2) ? &(getFunctor<ADReal>(NS::TV2)) : nullptr)
 {
   if (_dim >= 2 && !_v_var)
     paramError("v", "In two or more dimensions, the v velocity must be supplied!");
 
   if (_dim >= 3 && !_w_var)
     paramError("w", "In three or more dimensions, the w velocity must be supplied!");
+
+  if (_v2f_formulation && (!params.isParamValid(NS::TV2)))
+    paramError(NS::TV2, "A functor for v2 should be provided if the v2f formulation is selected.");
 }
 
 void
@@ -96,6 +105,7 @@ INSFVTKEDSourceSink::computeQpResidual()
       _linearized_model ? Moose::StateArg(1, Moose::SolutionIterationType::Nonlinear) : state;
   const auto mu = _mu(elem_arg, state);
   const auto rho = _rho(elem_arg, state);
+  const auto nu = mu / rho;
   const auto TKE = _k(elem_arg, state);
 
   if (_wall_bounded.find(_current_elem) != _wall_bounded.end())
@@ -211,11 +221,19 @@ INSFVTKEDSourceSink::computeQpResidual()
         (Sij_yy - trace) * grad_yy + Sij_yz * grad_yz + Sij_xz * grad_zx + Sij_yz * grad_zy +
         (Sij_zz - trace) * grad_zz;
 
-    const auto production_k = _C_mu * symmetric_strain_tensor_sq_norm * TKE;
+    auto time_scale = _k(elem_arg, old_state) / (_var(elem_arg, old_state) + 1e-15) + 1e-15;
+    if (_v2f_formulation)
+      time_scale = std::max(time_scale, 6 * std::sqrt(nu / _var(elem_arg, old_state)));
 
-    production = _C1_eps * rho * production_k;
-
-    const auto time_scale = _k(elem_arg, old_state) / (_var(elem_arg, old_state) + 1e-15) + 1e-15;
+    if (_v2f_formulation)
+    {
+      const auto blending_function =
+          1.0 + 0.05 * std::min(std::sqrt(TKE / (*_v2)(elem_arg, state)), 100.0);
+      production = _C1_eps * blending_function * _mu_t(elem_arg, state) *
+                   symmetric_strain_tensor_sq_norm / time_scale;
+    }
+    else
+      production = _C1_eps * rho * (_C_mu * symmetric_strain_tensor_sq_norm * TKE);
 
     destruction = _C2_eps * rho * _var(elem_arg, state) / time_scale;
 
