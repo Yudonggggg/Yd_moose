@@ -1064,6 +1064,7 @@ Builder::extractParams(const std::string & prefix, InputParameters & p)
         setscalar(BoundaryName, string);
         setscalar(FileName, string);
         setscalar(MeshFileName, string);
+        setscalar(MatrixFileName, string);
         setscalar(FileNameNoExtension, string);
         setscalar(RelativeFileName, string);
         setscalar(DataFileName, string);
@@ -1141,6 +1142,7 @@ Builder::extractParams(const std::string & prefix, InputParameters & p)
         setvector(RelativeFileName, string);
         setvector(DataFileName, string);
         setvector(MeshFileName, string);
+        setvector(MatrixFileName, string);
         setvector(SubdomainName, string);
         setvector(BoundaryName, string);
         setvector(NonlinearVariableName, string);
@@ -1202,6 +1204,7 @@ Builder::extractParams(const std::string & prefix, InputParameters & p)
         setvectorvector(FileNameNoExtension);
         setvectorvector(DataFileName);
         setvectorvector(MeshFileName);
+        setvectorvector(MatrixFileName);
         setvectorvector(SubdomainName);
         setvectorvector(BoundaryName);
         setvectorvector(VariableName);
@@ -1243,6 +1246,7 @@ Builder::extractParams(const std::string & prefix, InputParameters & p)
         setvectorvectorvector(FileNameNoExtension);
         setvectorvectorvector(DataFileName);
         setvectorvectorvector(MeshFileName);
+        setvectorvectorvector(MatrixFileName);
         setvectorvectorvector(SubdomainName);
         setvectorvectorvector(BoundaryName);
         setvectorvectorvector(VariableName);
