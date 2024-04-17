@@ -1,11 +1,9 @@
 mu = 1
 rho = 1
 l = 1
-U = 1
-n = 8
-gamma = ${U}
-omega_q = 1
-omega_m = 1
+U = 1e3
+n = 16
+gamma = 1e5
 
 [Mesh]
   [gen]
@@ -17,7 +15,7 @@ omega_m = 1
     ymax = ${l}
     nx = ${n}
     ny = ${n}
-    elem_type = QUAD9
+    elem_type = TRI6
   []
 []
 
@@ -30,11 +28,11 @@ omega_m = 1
 
 [Variables]
   [vel_x]
-    family = L2_HIERARCHIC
+    family = MONOMIAL
     order = FIRST
   []
   [vel_y]
-    family = L2_HIERARCHIC
+    family = MONOMIAL
     order = FIRST
   []
   [pressure]
@@ -105,25 +103,25 @@ omega_m = 1
     type = MassMatrix
     variable = pressure
     matrix_tags = 'mass'
-    density = ${fparse -gamma * omega_q}
+    density = ${fparse -1/gamma}
   []
 
-  # [grad_div_x]
-  #   type = GradDiv
-  #   variable = vel_x
-  #   u = vel_x
-  #   v = vel_y
-  #   gamma = ${gamma}
-  #   component = 0
-  # []
-  # [grad_div_y]
-  #   type = GradDiv
-  #   variable = vel_y
-  #   u = vel_x
-  #   v = vel_y
-  #   gamma = ${gamma}
-  #   component = 1
-  # []
+  [grad_div_x]
+    type = GradDiv
+    variable = vel_x
+    u = vel_x
+    v = vel_y
+    gamma = ${gamma}
+    component = 0
+  []
+  [grad_div_y]
+    type = GradDiv
+    variable = vel_y
+    u = vel_x
+    v = vel_y
+    gamma = ${gamma}
+    component = 1
+  []
 []
 
 [DGKernels]
@@ -216,7 +214,7 @@ omega_m = 1
     type = MassMatrixDGKernel
     variable = pressure_bar
     matrix_tags = 'mass'
-    density = ${fparse -gamma * omega_m}
+    density = ${fparse -1/gamma}
   []
 
   [u_jump]
@@ -334,7 +332,7 @@ omega_m = 1
     variable = pressure_bar
     matrix_tags = 'mass'
     boundary = 'left right bottom top'
-    density = ${fparse -gamma * omega_m}
+    density = ${fparse -1/gamma}
   []
 
   [u_jump]
@@ -428,7 +426,7 @@ omega_m = 1
 [Outputs]
   [out]
     type = Exodus
-    hide = 'pressure_integral'
+    hide = 'pressure_average'
   []
 []
 
@@ -438,12 +436,17 @@ omega_m = 1
     pp_names = ''
     function = '${rho} * ${U} * ${l} / ${mu}'
   []
-  [symmetric]
-    type = IsMatrixSymmetric
-  []
-  [pressure_integral]
-    type = ElementIntegralVariablePostprocessor
+  [pressure_average]
+    type = ElementAverageValue
     variable = pressure
-    execute_on = linear
+  []
+[]
+
+[UserObjects]
+  [set_pressure]
+    type = NSPressurePin
+    pin_type = 'average'
+    variable = pressure
+    pressure_average = 'pressure_average'
   []
 []
