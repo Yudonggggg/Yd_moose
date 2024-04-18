@@ -16,10 +16,17 @@ enum class CapState
 {
   FALSE,
   MAYBE_FALSE,
+  UNKNOWN,
   MAYBE_TRUE,
   TRUE
 };
 
+const auto f_name = [](auto & ctx)
+{
+  const auto name = _attr(ctx);
+  std::cout << "NAME: " << name << '\n';
+  _val(ctx) = name;
+};
 
 const std::map<std::string, bool> caps = {{"petsc", true}, {"nope", false}};
 
@@ -29,18 +36,18 @@ bp::rule<struct cont_letter_tag, char> cont_letter = "continuation of an identif
 bp::rule<struct name_tag, std::string> name = "capability name";
 auto const start_letter_def = bp::lower | bp::upper | '_';
 auto const cont_letter_def = start_letter_def | bp::digit;
-auto const name_def = start_letter >> *(cont_letter);
+auto const name_def = (start_letter >> *(cont_letter))[f_name];
 BOOST_PARSER_DEFINE_RULES(start_letter, cont_letter, name);
 
 // check bool existence
 const auto f_identifier = [](auto & ctx)
 {
-  std::cout << "f_identifier " << _attr(ctx) << '\n';
   if (caps.find(_attr(ctx)) != caps.end())
     _val(ctx) = CapState::TRUE;
   else
     _val(ctx) = CapState::MAYBE_FALSE;
 };
+
 const auto f_not_identifier = [](auto & ctx)
 {
   if (caps.find(_attr(ctx)) != caps.end())
@@ -51,20 +58,54 @@ const auto f_not_identifier = [](auto & ctx)
 
 const auto f_compare = [](auto & ctx)
 {
-  std::cout << "f_compare ";
   const auto & [left, op, right] = _attr(ctx);
-  // type_is<decltype(_attr(ctx))>();
+  static_assert(
+      std::is_same_v<decltype(right), const std::variant<std::string, std::vector<unsigned int>>>,
+      "Unexpected RHS value type in comparison");
+
+  // check existence
+  if (caps.find(left) == caps.end())
+  {
+    // return an unknown if the capability does not exist, this is important as it
+    // stays unknown upon negation
+    _val(ctx) = CapState::UNKNOWN;
+    return;
+  }
+
+  // comparator
+  auto comp = [](int i, auto a, auto b)
+  {
+    switch (i)
+    {
+      case 0:
+        return a <= b;
+      case 1:
+        return a >= b;
+      case 2:
+        return a < b;
+      case 3:
+        return a > b;
+      case 4:
+        return a != b;
+      case 5:
+      case 6:
+        return a == b;
+    }
+    return false;
+  };
+
+  // string comparison
   if (std::holds_alternative<std::string>(right))
     std::cout << "string: " << left << ' ' << op << ' ' << std::get<std::string>(right) << '\n';
-  else if (std::holds_alternative<std::vector<unsigned int>>(right))
+
+  // number or version comparison
+  if (std::holds_alternative<std::vector<unsigned int>>(right))
   {
     std::cout << "version: " << left << ' ';
     for (const auto num : std::get<std::vector<unsigned int>>(right))
       std::cout << num << '.';
     std::cout << '\n';
   }
-  else
-    std::cout << "WHAT?!\n";
 
   _val(ctx) = CapState::FALSE;
 };
@@ -99,54 +140,56 @@ pcap(CapState c)
       return "maybe_false";
     case CapState::MAYBE_TRUE:
       return "maybe_true";
+    default:
+      return "UNKNOWN";
   }
 }
 
 const auto f_conjunction = [](auto & ctx)
 {
   const auto & [s0, ss] = _attr(ctx);
-
-  std::cout << "f_conjunction: ";
-  std::cout << pcap(s0);
+  CapState s = s0;
   for (const auto & [op, sn] : ss)
-    std::cout << ' ' << (op ? '|' : '&') << ' ' << pcap(sn);
-  std::cout << '\n';
-};
-
-const auto f_and = [](auto & ctx)
-{
-  std::cout << "f_and\n";
-  const auto & [left, right] = _attr(ctx);
-  const auto states = {
-      CapState::FALSE, CapState::MAYBE_FALSE, CapState::MAYBE_TRUE, CapState::TRUE};
-
-  for (const auto state : states)
-    if (left == state || right == state)
+  {
+    if (op == 0)
     {
-      _val(ctx) = state;
-      return;
+      // and
+      const auto states = {CapState::FALSE,
+                           CapState::MAYBE_FALSE,
+                           CapState::UNKNOWN,
+                           CapState::MAYBE_TRUE,
+                           CapState::TRUE};
+      for (const auto state : states)
+        if (s == state || sn == state)
+        {
+          s = state;
+          break;
+        }
     }
-};
-
-const auto f_or = [](auto & ctx)
-{
-  std::cout << "f_or\n";
-  const auto & [left, right] = _attr(ctx);
-  const auto states = {
-      CapState::TRUE, CapState::MAYBE_TRUE, CapState::MAYBE_FALSE, CapState::FALSE};
-
-  for (const auto state : states)
-    if (left == state || right == state)
+    else if (op == 1)
     {
-      _val(ctx) = state;
-      return;
+      // or
+      const auto states = {CapState::TRUE,
+                           CapState::MAYBE_TRUE,
+                           CapState::UNKNOWN,
+                           CapState::MAYBE_FALSE,
+                           CapState::FALSE};
+      for (const auto state : states)
+        if (s == state || sn == state)
+        {
+          s = state;
+          break;
+        }
     }
+    else
+      _error_handler(ctx).diagnose(boost::parser::diagnostic_kind::error, "Unknown operator", ctx);
+  }
+  _val(ctx) = s;
 };
 
 const auto f_negate = [](auto & ctx)
 {
   // negate current capability state
-  std::cout << "f_negate\n";
   switch (_attr(ctx))
   {
     case CapState::FALSE:
@@ -161,6 +204,8 @@ const auto f_negate = [](auto & ctx)
     case CapState::MAYBE_TRUE:
       _val(ctx) = CapState::MAYBE_FALSE;
       break;
+    default:
+      _val(ctx) = CapState::UNKNOWN;
   }
 };
 
@@ -168,7 +213,6 @@ const auto f_pass = [](auto & ctx)
 {
   // pass through value
   _val(ctx) = _attr(ctx);
-  std::cout << "f_pass\n";
 };
 
 // bool_statement
@@ -179,51 +223,25 @@ bp::rule<struct p_conjunction_tag, CapState> p_conjunction = "conjunction expres
 bp::rule<struct expr_tag, CapState> expr = "boolean expression";
 
 auto const p_conjunction_def = (bool_statement > *(conjunction > bool_statement))[f_conjunction];
-// auto const p_conjunction_def = (expr > "&" > expr)[f_and] | (expr > "|" > expr)[f_or];
 
 auto const expr_def = p_conjunction;
 
-auto const bool_statement_def = ('!' > name)[f_not_identifier] |
+auto const bool_statement_def = ('!' >> name)[f_not_identifier] |
                                 (name >> comparison >> value)[f_compare] | name[f_identifier] |
                                 ('(' > expr > ')')[f_pass] | ("!(" > expr > ')')[f_negate];
-
-// auto const expr_def = p_negate[f_negate] | p_conjunction | p_pass[f_pass]; //[f_conjunction];
 
 BOOST_PARSER_DEFINE_RULES(p_conjunction, expr, bool_statement);
 }
 
-/*
-<name> ::= [a-z] ([a-z] | [0-9])*
-<comp> ::= (">" | "<") ("=")? | "!=" | "="
-<conj> ::= "&" | "|"
-<value> ::= ([a-z] | [0-9] | "_" | "-")+ | [0-9] ("." [0-9]+)*
-<bool> ::= <name> | <name> <comp> <value>
-<expr> ::= "!(" <expr> ")" | "(" <expr> ")" | <bool> | <expr> <conj> <expr>
-
-https://bnfplayground.pauliankline.com/?bnf=%3Cname%3E%20%3A%3A%3D%20%5Ba-z%5D%20(%5Ba-z%5D%20%7C%20%5B0-9%5D)*%0A%3Ccomp%3E%20%3A%3A%3D%20(%22%3E%22%20%7C%20%22%3C%22)%20(%22%3D%22)%3F%20%7C%20%22!%3D%22%20%7C%20%22%3D%22%0A%3Cconj%3E%20%3A%3A%3D%20%22%26%22%20%7C%20%22%7C%22%0A%3Cvalue%3E%20%3A%3A%3D%20(%5Ba-z%5D%20%7C%20%5B0-9%5D%20%7C%20%22_%22%20%7C%20%22-%22)%2B%20%7C%20%5B0-9%5D%20(%22.%22%20%5B0-9%5D%2B)*%20%0A%3Cbool%3E%20%3A%3A%3D%20%3Cname%3E%20%7C%20%3Cname%3E%20%3Ccomp%3E%20%3Cvalue%3E%0A%3Cexpr%3E%20%3A%3A%3D%20%22!(%22%20%3Cexpr%3E%20%22)%22%20%7C%20%22(%22%20%3Cexpr%3E%20%22)%22%20%7C%20%3Cbool%3E%20%7C%20%3Cexpr%3E%20%3Cconj%3E%20%3Cexpr%3E&name=Real%20Numbers*/
 int
 main()
 {
   // std::string input = "2.445.5";
-  std::string input = "petsc & f>23.4.12 & thermochimica";
+  std::string input = "petsc & !(f>23.4.12 & thermochimica)";
   // std::string input = "a & b";
 
   auto const result = bp::parse(input, expr, bp::ws); //, bp::trace::on);
-  // type_is<decltype(*result)>();
-
-  // if (result)
-  // {
-  //   std::cout << "Great! It looks like you entered:\n";
-  //   // std::cout << *result << "\n";
-  //   for (auto & x : *result)
-  //   {
-  //     std::cout << x << "\n";
-  //   }
-  // }
-  // else
-  // {
-  //   std::cout << "Good job!  Please proceed to the recovery annex for cake.\n";
-  // }
+  std::cout << pcap(*result) << '\n';
 
   return 0;
 }
