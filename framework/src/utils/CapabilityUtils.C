@@ -8,10 +8,13 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #define BOOST_PARSER_DISABLE_HANA_TUPLE
+#include "libmesh/ignore_warnings.h"
 #include <boost/parser/parser.hpp>
+#include "libmesh/restore_warnings.h"
 
 #include "CapabilityUtils.h"
 #include "MooseUtilsStandalone.h"
+#include "MooseError.h"
 #include <vector>
 #include <set>
 
@@ -49,8 +52,17 @@ const auto f_name = [](auto & ctx)
 const auto f_identifier = [](auto & ctx)
 {
   const auto & app_capabilities = std::get<0>(_globals(ctx));
-  if (app_capabilities.find(_attr(ctx)) != app_capabilities.end())
+  const auto it = app_capabilities.find(_attr(ctx));
+  if (it != app_capabilities.end())
+  {
+    const auto app_value = it->second.first;
+    if (std::holds_alternative<bool>(app_value) && std::get<bool>(app_value) == false)
+    {
+      _val(ctx) = CapState::FALSE;
+      return;
+    }
     _val(ctx) = CapState::TRUE;
+  }
   else
     _val(ctx) = CapState::MAYBE_FALSE;
 };
@@ -59,8 +71,17 @@ const auto f_identifier = [](auto & ctx)
 const auto f_not_identifier = [](auto & ctx)
 {
   const auto & app_capabilities = std::get<0>(_globals(ctx));
-  if (app_capabilities.find(_attr(ctx)) != app_capabilities.end())
+  const auto it = app_capabilities.find(_attr(ctx));
+  if (it != app_capabilities.end())
+  {
+    const auto app_value = it->second.first;
+    if (std::holds_alternative<bool>(app_value) && std::get<bool>(app_value) == false)
+    {
+      _val(ctx) = CapState::TRUE;
+      return;
+    }
     _val(ctx) = CapState::FALSE;
+  }
   else
     _val(ctx) = CapState::MAYBE_TRUE;
 };
@@ -109,9 +130,17 @@ const auto f_compare = [](auto & ctx)
     return false;
   };
 
+  // false bool capability will always fail any other comparison
+  if (std::holds_alternative<bool>(app_value) && !std::get<bool>(app_value))
+  {
+    _val(ctx) = CapState::FALSE;
+    return;
+  }
+
   // string comparison
   if (std::holds_alternative<std::string>(right))
   {
+    // the app value has to be a string
     if (!std::holds_alternative<std::string>(app_value))
     {
       _error_handler(ctx).diagnose(
@@ -119,7 +148,9 @@ const auto f_compare = [](auto & ctx)
       return;
     }
 
-    _val(ctx) = comp(op, std::get<std::string>(app_value), std::get<std::string>(right))
+    _val(ctx) = comp(op,
+                     std::get<std::string>(app_value),
+                     MooseUtils::toLower(std::get<std::string>(right)))
                     ? CapState::TRUE
                     : CapState::FALSE;
     return;
@@ -140,8 +171,8 @@ const auto f_compare = [](auto & ctx)
         return;
       }
 
-      // _val(ctx) =
-      comp(op, std::get<int>(app_value), test_value[0]) ? CapState::TRUE : CapState::FALSE;
+      _val(ctx) =
+          comp(op, std::get<int>(app_value), test_value[0]) ? CapState::TRUE : CapState::FALSE;
       return;
     }
 
@@ -150,9 +181,12 @@ const auto f_compare = [](auto & ctx)
     if (!std::holds_alternative<std::string>(app_value) ||
         !MooseUtils::tokenizeAndConvert(std::get<std::string>(app_value), app_value_version, "."))
     {
-      _error_handler(ctx).diagnose(boost::parser::diagnostic_kind::error,
-                                   "Cannot compare capability to a version number.",
-                                   ctx);
+      if (test_value.size() == 1)
+        _error_handler(ctx).diagnose(boost::parser::diagnostic_kind::error,
+                                     test_value.size() == 1
+                                         ? "Cannot compare capability to a number."
+                                         : "Cannot compare capability to a version number.",
+                                     ctx);
       return;
     }
 
@@ -237,7 +271,7 @@ bp::rule<struct start_letter_tag, char> start_letter = "first letter of an ident
 bp::rule<struct cont_letter_tag, char> cont_letter = "continuation of an identifier";
 bp::rule<struct name_tag, std::string> name = "capability name";
 
-auto const start_letter_def = bp::lower | bp::upper | '_';
+auto const start_letter_def = bp::lower | bp::upper | bp::char_('_');
 auto const cont_letter_def = start_letter_def | bp::digit;
 auto const name_def = (start_letter >> *(cont_letter))[f_name];
 
@@ -254,7 +288,7 @@ bp::rule<struct version_tag, std::vector<unsigned int>> version = "version numbe
 bp::rule<struct value_tag, std::variant<std::string, std::vector<unsigned int>>> value =
     "capability value";
 
-auto const generic_def = +(bp::lower | bp::upper | bp::digit | '_' | '-');
+auto const generic_def = +(bp::lower | bp::upper | bp::digit | bp::char_('_') | bp::char_('-'));
 auto const version_def = bp::uint_ >> *('.' >> bp::uint_);
 auto const value_def = version | generic;
 
@@ -282,11 +316,19 @@ check(const std::string & requirements, const Registry & app_capabilities)
   // globals for the parser
   auto globals = std::tie(app_capabilities, seen_capabilities);
 
+  // error handler
+  bp::callback_error_handler ceh([](std::string const & msg) { mooseError(msg); },
+                                 [](std::string const & msg) { mooseWarning(msg); });
   // parse
-  auto const result = bp::parse(requirements, bp::with_globals(expr, globals), bp::ws);
+  auto const result = bp::parse(requirements,
+                                bp::with_error_handler(bp::with_globals(expr, globals), ceh),
+                                bp::ws); //, bp::trace::on);
 
   // reduce result
-  CheckState state = CERTAIN_PASS;
+  if (!result.has_value())
+    mooseError("Failed to parse requirements '", requirements, "'");
+
+  CheckState state = static_cast<CheckState>(result.value());
   std::string reason;
   std::string doc;
 

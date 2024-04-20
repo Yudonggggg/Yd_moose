@@ -8,6 +8,7 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "Capabilities.h"
+#include "MooseException.h"
 #include "libmesh/int_range.h"
 
 #include "gtest/gtest.h"
@@ -25,11 +26,12 @@ TEST(CapabilitiesTest, boolTest)
   EXPECT_FALSE(std::get<bool>(capabilities.check("unittest_bool2>10")));
   EXPECT_FALSE(std::get<bool>(capabilities.check("unittest_bool2<=10")));
   EXPECT_FALSE(std::get<bool>(capabilities.check("unittest_bool2<=1.0.0")));
-  EXPECT_FALSE(std::get<bool>(capabilities.check("unittest_bool2=>1.0.0")));
+  EXPECT_FALSE(std::get<bool>(capabilities.check("unittest_bool2>=1.0.0")));
+  EXPECT_THROW(capabilities.check("unittest_bool2=>1.0.0"), std::runtime_error);
   EXPECT_FALSE(std::get<bool>(capabilities.check("unittest_doesnotexist")));
   EXPECT_TRUE(std::get<bool>(capabilities.check("!unittest_doesnotexist")));
-  EXPECT_THROW(capabilities.check("unittest_bool="), std::invalid_argument);
-  EXPECT_THROW(capabilities.check("unittest_bool=="), std::invalid_argument);
+  EXPECT_THROW(capabilities.check("unittest_bool="), std::runtime_error);
+  EXPECT_THROW(capabilities.check("unittest_bool=="), std::runtime_error);
 }
 
 TEST(CapabilitiesTest, intTest)
@@ -44,14 +46,14 @@ TEST(CapabilitiesTest, intTest)
   for (const auto & c : is_true)
   {
     EXPECT_TRUE(std::get<bool>(capabilities.check("unittest_int" + c)));
-    EXPECT_FALSE(std::get<bool>(capabilities.check("!unittest_int" + c)));
+    EXPECT_FALSE(std::get<bool>(capabilities.check("!(unittest_int" + c + ")")));
   }
   for (const auto & c : is_false)
   {
     EXPECT_FALSE(std::get<bool>(capabilities.check("unittest_int" + c)));
-    EXPECT_TRUE(std::get<bool>(capabilities.check("!unittest_int" + c)));
+    EXPECT_TRUE(std::get<bool>(capabilities.check("!(unittest_int" + c + ")")));
   }
-  EXPECT_THROW(capabilities.check("unittest_int<"), std::invalid_argument);
+  EXPECT_THROW(capabilities.check("unittest_int<"), std::runtime_error);
 }
 
 TEST(CapabilitiesTest, stringTest)
@@ -65,7 +67,7 @@ TEST(CapabilitiesTest, stringTest)
   EXPECT_TRUE(std::get<bool>(capabilities.check("unittest_string=clang")));
   EXPECT_TRUE(std::get<bool>(capabilities.check("unittest_string=CLANG")));
   EXPECT_FALSE(std::get<bool>(capabilities.check("unittest_string=gcc")));
-  EXPECT_THROW(capabilities.check("unittest_string>"), std::invalid_argument);
+  EXPECT_THROW(capabilities.check("unittest_string>"), std::runtime_error);
 }
 
 TEST(CapabilitiesTest, versionTest)
@@ -95,14 +97,14 @@ TEST(CapabilitiesTest, versionTest)
   for (const auto & c : is_true)
   {
     EXPECT_TRUE(std::get<bool>(capabilities.check("unittest_version" + c)));
-    EXPECT_FALSE(std::get<bool>(capabilities.check("!unittest_version" + c)));
+    EXPECT_FALSE(std::get<bool>(capabilities.check("!(unittest_version" + c + ")")));
   }
   for (const auto & c : is_false)
   {
     EXPECT_FALSE(std::get<bool>(capabilities.check("unittest_version" + c)));
-    EXPECT_TRUE(std::get<bool>(capabilities.check("!unittest_version" + c)));
+    EXPECT_TRUE(std::get<bool>(capabilities.check("!(unittest_version" + c + ")")));
   }
-  EXPECT_THROW(capabilities.check("!unittest_version<"), std::invalid_argument);
+  EXPECT_THROW(capabilities.check("!unittest_version<"), std::runtime_error);
 }
 
 TEST(CapabilitiesTest, multipleTest)
@@ -115,10 +117,10 @@ TEST(CapabilitiesTest, multipleTest)
   capabilities.add("unittest2_version", "3.2.1", "Multiple capability test version number");
 
   EXPECT_TRUE(std::get<bool>(
-      capabilities.check("!unittest_doesnotexist unittest2_version<4.2.2 "
-                         "unittest2_int<100 unittest2_int>50 unittest2_string!=Popel")));
+      capabilities.check("!unittest_doesnotexist & unittest2_version<4.2.2 &"
+                         "unittest2_int<100 & unittest2_int>50 & unittest2_string!=Popel")));
   EXPECT_THROW(capabilities.check("unittest2_bool unittest2_int< unittest2_string==Popel"),
-               std::invalid_argument);
+               std::runtime_error);
 
   // test mix of true and false requirements (even indices are true, odd are false)
   const std::vector<std::string> test = {"unittest2_bool",
@@ -134,19 +136,6 @@ TEST(CapabilitiesTest, multipleTest)
   for (const auto i : index_range(test))
     for (const auto j : index_range(test))
       for (const auto k : index_range(test))
-        EXPECT_EQ(std::get<bool>(capabilities.check(test[i] + ' ' + test[j] + ' ' + test[k])),
+        EXPECT_EQ(std::get<bool>(capabilities.check(test[i] + " & " + test[j] + " & " + test[k])),
                   i % 2 + j % 2 + k % 2 == 0);
-}
-
-#define BOOST_PARSER_DISABLE_HANA_TUPLE
-#include <boost/parser/parser.hpp>
-
-#include <iostream>
-#include <string>
-
-namespace bp = boost::parser;
-
-TEST(CapabilitiesTest, spiritParser)
-{
-  
 }

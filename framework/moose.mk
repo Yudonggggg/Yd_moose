@@ -156,7 +156,7 @@ capabilities_COMPILEFLAGS += $(PYMOD_COMPILEFLAGS)
 
 capabilities $(capabilities_LIB) : $(capabilities_srcfiles)
 	@echo "Building and linking "$@"..."
-	@bash -c '(cd "$(CAPABILITIES_DIR)" && $(libmesh_CXX) -std=c++17 -w -fPIC -lstdc++ -shared $^ -I $(MOOSE_DIR)/framework/include/utils -I $(MOOSE_DIR)/framework/contrib/boost/include $(capabilities_COMPILEFLAGS) $(DYNAMIC_LOOKUP) -o $(capabilities_LIB))'
+	@bash -c '(cd "$(CAPABILITIES_DIR)" && $(libmesh_CXX) -std=c++17 -w -fPIC -lstdc++ -shared $^ $(app_INCLUDES) $(libmesh_INCLUDE) -I $(MOOSE_DIR)/framework/contrib/boost/include $(capabilities_COMPILEFLAGS) $(DYNAMIC_LOOKUP) -o $(capabilities_LIB))'
 
 #
 # gtest
