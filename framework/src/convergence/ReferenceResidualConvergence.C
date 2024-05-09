@@ -107,8 +107,8 @@ ReferenceResidualConvergence::ReferenceResidualConvergence(const InputParameters
     _use_group_variables(false),
     _reference_vector(nullptr),
     _converge_on(getParam<std::vector<NonlinearVariableName>>("converge_on")),
-    _zero_ref_type(getParam<MooseEnum>("zero_reference_residual_treatment")
-                       .getEnum<ZeroReferenceType>()),
+    _zero_ref_type(
+        getParam<MooseEnum>("zero_reference_residual_treatment").getEnum<ZeroReferenceType>()),
     _reference_vector_tag_id(Moose::INVALID_TAG_ID),
     _initialized(false)
 {
@@ -198,8 +198,9 @@ ReferenceResidualConvergence::ReferenceResidualConvergence(const InputParameters
 
   if (_local_norm && !parameters.isParamValid("reference_vector"))
     paramError("reference_vector", "If local norm is used, a reference_vector must be provided.");
-  
-  Moose::out << "ReferenceResidualConvergence" << parameters.isParamValid("reference_vector") << '\n';
+
+  Moose::out << "ReferenceResidualConvergence" << parameters.isParamValid("reference_vector")
+             << '\n';
 }
 
 void
