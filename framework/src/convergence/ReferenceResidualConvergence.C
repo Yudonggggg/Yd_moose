@@ -19,9 +19,6 @@
 #include "TaggingInterface.h"
 
 #include "AuxiliarySystem.h"
-//#include "MooseApp.h"
-//#include "MooseMesh.h"
-//#include "MooseVariable.h"
 #include "MooseVariableScalar.h"
 #include "NonlinearSystem.h"
 
@@ -40,8 +37,6 @@ ReferenceResidualConvergence::validParams()
 {
   InputParameters params = ResidualConvergence::validParams();
   params += validCommonReferenceResidualProblemParams();
-  // params += FEProblemSolve::commonParams();
-  // params += ReferenceResidualProblem::commonParams();
 
   params.addClassDescription("Check ReferenceResidualConvergence of the set up problem.");
 
