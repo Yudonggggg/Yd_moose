@@ -74,7 +74,6 @@ coef=3000
   []
 []
 
-
 [Executioner]
   type = Steady
 []
