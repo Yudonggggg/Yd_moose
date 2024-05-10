@@ -32,7 +32,10 @@ ResidualConvergence::validParams()
   InputParameters params = Convergence::validParams();
   params += FEProblemSolve::commonParams();
 
-  params.addClassDescription("Check ResidualConvergence of the set up problem.");
+  params.addClassDescription(
+      "Check the convergence of residual during nonlinear iterations. Return "
+      "CONVERGED if the residual is less than user-supplied stopping criteria,"
+      "DIVERGED if the residual is greater than the tolerance, or ITERATING otherwise.");
 
   return params;
 }

@@ -38,7 +38,9 @@ ReferenceResidualConvergence::validParams()
   InputParameters params = ResidualConvergence::validParams();
   params += validCommonReferenceResidualProblemParams();
 
-  params.addClassDescription("Check ReferenceResidualConvergence of the set up problem.");
+  params.addClassDescription(
+      "Check the convergence of a problem with respect to a user-supplied reference solution."
+      " Replaces ReferenceResidualProblem, currently still used in conjunction with it.");
 
   return params;
 }

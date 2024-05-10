@@ -7,7 +7,6 @@
 //* Licensed under LGPL 2.1, please see LICENSE for details
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
-// MOOSE includes
 #include "Convergence.h"
 
 InputParameters
@@ -18,8 +17,10 @@ Convergence::validParams()
   params += PerfGraphInterface::validParams();
 
   params.registerBase("Convergence");
-  // params.registerSystemAttributeName("ConvergenceName");
-  params.addClassDescription("Check convergence of the set up problem.");
+  params.addClassDescription("Base class for convergence criteria. This class is responsible for "
+                             "checking the convergence of the nonlinear solution. It is also "
+                             "responsible for interacting with the solver at every iteration "
+                             "and generate a performance graph.");
 
   return params;
 }
