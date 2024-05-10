@@ -9,6 +9,16 @@
 
 #define BOOST_PARSER_DISABLE_HANA_TUPLE
 #include "libmesh/ignore_warnings.h"
+// these need to be added to libmesh
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wunused-variable"
+#pragma clang diagnostic ignored "-Wdangling-field"
+#endif
+#if defined(__GNUC__) && !defined(__INTEL_COMPILER) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wdangling-field"
+#pragma GCC diagnostic ignored "-Wattributes"
+#endif
 #include <boost/parser/parser.hpp>
 #include "libmesh/restore_warnings.h"
 
@@ -90,9 +100,8 @@ const auto f_not_identifier = [](auto & ctx)
 const auto f_compare = [](auto & ctx)
 {
   const auto & [left, op, right] = _attr(ctx);
-  static_assert(
-      std::is_same_v<decltype(right), const std::variant<std::string, std::vector<unsigned int>>>,
-      "Unexpected RHS value type in comparison");
+  static_assert(std::is_same_v<decltype(right), const std::variant<std::string, std::vector<int>>>,
+                "Unexpected RHS value type in comparison");
 
   // check existence
   const auto & app_capabilities = std::get<0>(_globals(ctx));
@@ -157,9 +166,9 @@ const auto f_compare = [](auto & ctx)
   }
 
   // number or version comparison
-  if (std::holds_alternative<std::vector<unsigned int>>(right))
+  if (std::holds_alternative<std::vector<int>>(right))
   {
-    const auto & test_value = std::get<std::vector<unsigned int>>(right);
+    const auto & test_value = std::get<std::vector<int>>(right);
 
     // int comparison
     if (std::holds_alternative<int>(app_value))
@@ -177,7 +186,7 @@ const auto f_compare = [](auto & ctx)
     }
 
     // version comparison
-    std::vector<unsigned int> app_value_version;
+    std::vector<int> app_value_version;
     if (!std::holds_alternative<std::string>(app_value) ||
         !MooseUtils::tokenizeAndConvert(std::get<std::string>(app_value), app_value_version, "."))
     {
@@ -275,8 +284,6 @@ auto const start_letter_def = bp::lower | bp::upper | bp::char_('_');
 auto const cont_letter_def = start_letter_def | bp::digit;
 auto const name_def = (start_letter >> *(cont_letter))[f_name];
 
-BOOST_PARSER_DEFINE_RULES(start_letter, cont_letter, name);
-
 // symbols
 bp::symbols<int> const comparison = {
     {"<=", 0}, {">=", 1}, {"<", 2}, {">", 3}, {"!=", 4}, {"==", 5}, {"=", 5}};
@@ -284,15 +291,12 @@ bp::symbols<int> const conjunction = {{"&", 0}, {"|", 1}};
 
 // capability value
 bp::rule<struct generic_tag, std::string> generic = "generic capability value";
-bp::rule<struct version_tag, std::vector<unsigned int>> version = "version number";
-bp::rule<struct value_tag, std::variant<std::string, std::vector<unsigned int>>> value =
-    "capability value";
+bp::rule<struct version_tag, std::vector<int>> version = "version number";
+bp::rule<struct value_tag, std::variant<std::string, std::vector<int>>> value = "capability value";
 
 auto const generic_def = +(bp::lower | bp::upper | bp::digit | bp::char_('_') | bp::char_('-'));
 auto const version_def = bp::uint_ >> *('.' >> bp::uint_);
 auto const value_def = version | generic;
-
-BOOST_PARSER_DEFINE_RULES(generic, version, value);
 
 // expression
 bp::rule<struct expr_tag, CapState> expr = "boolean expression";
@@ -305,12 +309,18 @@ auto const bool_statement_def = ('!' >> name)[f_not_identifier] |
                                 (name >> comparison >> value)[f_compare] | name[f_identifier] |
                                 ('(' > expr > ')')[f_pass] | ("!(" > expr > ')')[f_negate];
 
-BOOST_PARSER_DEFINE_RULES(p_conjunction, expr, bool_statement);
+#include "libmesh/ignore_warnings.h"
+BOOST_PARSER_DEFINE_RULES(
+    start_letter, cont_letter, name, generic, version, value, p_conjunction, expr, bool_statement);
+#include "libmesh/restore_warnings.h"
 } // namespace
 
 Result
 check(const std::string & requirements, const Registry & app_capabilities)
 {
+  if (requirements == "")
+    return {CapabilityUtils::CERTAIN_PASS, "Empty requirements", ""};
+
   std::set<std::string> seen_capabilities;
 
   // globals for the parser
@@ -319,10 +329,22 @@ check(const std::string & requirements, const Registry & app_capabilities)
   // error handler
   bp::callback_error_handler ceh([](std::string const & msg) { mooseError(msg); },
                                  [](std::string const & msg) { mooseWarning(msg); });
+#include "libmesh/ignore_warnings.h"
+// these need to be added to libmesh
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wtype-limits"
+#endif
+#if defined(__GNUC__) && !defined(__INTEL_COMPILER) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wunused-but-set-parameter"
+#pragma GCC system_header
+#endif
+
   // parse
   auto const result = bp::parse(requirements,
                                 bp::with_error_handler(bp::with_globals(expr, globals), ceh),
                                 bp::ws); //, bp::trace::on);
+
+#include "libmesh/restore_warnings.h"
 
   // reduce result
   if (!result.has_value())

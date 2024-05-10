@@ -78,12 +78,10 @@ Capabilities::dump() const
   return root.dump(2);
 }
 
-std::tuple<bool, std::string, std::string>
+CapabilityUtils::Result
 Capabilities::check(const std::string & requested_capabilities) const
 {
-  const auto & [status, message, doc] =
-      CapabilityUtils::check(requested_capabilities, _capability_registry);
-  return {status >= CapabilityUtils::POSSIBLE_PASS, message, doc};
+  return CapabilityUtils::check(requested_capabilities, _capability_registry);
 }
 
 } // namespace Moose
