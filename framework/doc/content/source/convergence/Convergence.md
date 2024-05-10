@@ -1,17 +1,28 @@
 # Convergence system
 
-The Convergence system provides the infrastracuture for creating MOOSe objects that interact with the solvers to give the user more control over the application behaviour. 
+The Convergence system provides the infrastracuture for creating MOOSe objects that interact with the 
+solvers to give the user more control over the application behaviour. 
 
 ## Description
-
-Currently this object supports two types of convergence
-[ResidualConvergence](syntax/Convergence/ResidualConvergence.md)
-[ReferenceResidualConvergence](syntax/Convergence/ReferenceResidualConvergence.md)
 
 By default, MOOSE checks convergence using relative and absolute criteria. Once the residual drops
 below either an absolute tolerance, or the residual divided by the initial residual for the current
 time step drops below a relative tolerance, the solution is considered converged. This works well for
-many problems, but there are some scenarios that are problematic for convergence:
+many problems, but there are some scenarios that are problematic, where the user may desire 
+interaction with the solver at runtime for better control or analysis. 
+
+Currently this object supports algebraic two types of convergence
+[ResidualConvergence](syntax/Convergence/ResidualConvergence.md)
+[ReferenceResidualConvergence](syntax/Convergence/ReferenceResidualConvergence.md)
+
+### Methods supported
+
+- +Residual Convergence+
+
+This type of convergence [ResidualConvergence](syntax/Convergence/ResidualConvergence.md)
+
+- +Reference Residual Convergence+
+ [ReferenceResidualConvergence](syntax/Convergence/ReferenceResidualConvergence.md)
 
 `ReferenceResidualConvergence` checks for convergence by comparing the residual to a different
 reference quantity (instead of the initial residual). The user specifies a reference vector that can be used in
@@ -26,6 +37,9 @@ tolerance required to achieve the same error is typically different than with th
 MOOSE, and the differences will vary by the problem. The code user must evaluate the behavior of
 their model to ensure that appropriate tolerances are being used.
 
+### Solver convergence criteria parameters
+
+Parameters for setting absolute convergence, relative convergence etc. are usually set in the `[Executioner]` block
 
 ## Example input syntax
 
