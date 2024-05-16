@@ -250,7 +250,6 @@ CombinerGenerator::copyIntoMesh(UnstructuredMesh & destination, const Unstructur
                             *destination.get_mesh_subdomains().rbegin() -
                                 *source.get_mesh_subdomains().begin()) +
                    1;
-    _console << "Offsetting blocks by " << block_offset << std::endl;
     for (const auto bid : source.get_mesh_subdomains())
       id_remapping[bid] = block_offset + bid;
   }
@@ -270,11 +269,15 @@ CombinerGenerator::copyIntoMesh(UnstructuredMesh & destination, const Unstructur
   BoundaryInfo & boundary = destination.get_boundary_info();
   const BoundaryInfo & other_boundary = source.get_boundary_info();
 
+  if (_avoid_merging_boundaries)
+  {
+    destination.prepare_for_use(false, false);
+    const_cast<UnstructuredMesh &>(source).prepare_for_use();
+  }
   const auto bid_offset = _avoid_merging_boundaries
                               ? (*boundary.get_global_boundary_ids().rbegin() -
                                  *other_boundary.get_global_boundary_ids().begin() + 1)
                               : 0;
-  _console << "Offsetting boundaries by " << bid_offset << std::endl;
 
   // Note: the code below originally came from ReplicatedMesh::stitch_mesh_helper()
   // in libMesh replicated_mesh.C around line 1203
@@ -294,9 +297,39 @@ CombinerGenerator::copyIntoMesh(UnstructuredMesh & destination, const Unstructur
     boundary.add_shellface(
         std::get<0>(t) + elem_delta, std::get<1>(t), bid_offset + std::get<2>(t));
 
+  // Check for the case with two block ids sharing the same name
+  if (_avoid_merging_subdomains)
+  {
+    for (const auto & [block_id, block_name] : destination.get_subdomain_name_map())
+      for (const auto & [source_id, source_name] : source.get_subdomain_name_map())
+        if (block_name == source_name)
+          paramWarning("avoid_merging_subdomains",
+                       "Not merging subdomains is creating two subdomains with the same name '" +
+                           block_name + "' but different ids: " + std::to_string(source_id) +
+                           " & " + std::to_string(block_id + block_offset) +
+                           ".\n We recommend using a RenameBlockGenerator to prevent this as you "
+                           "will get errors reading the Exodus output later.");
+  }
+
   for (const auto & [block_id, block_name] : source.get_subdomain_name_map())
     destination.set_subdomain_name_map().insert(
         std::make_pair<SubdomainID, SubdomainName>(block_id + block_offset, block_name));
+
+  // Check for the case with two boundary ids sharing the same name
+  if (_avoid_merging_boundaries)
+  {
+    // We only check with sidesets
+    for (const auto & [b_id, b_name] : other_boundary.get_sideset_name_map())
+      for (const auto & [source_id, source_name] : boundary.get_sideset_name_map())
+        if (b_name == source_name)
+          paramWarning(
+              "avoid_merging_boundaries",
+              "Not merging boundaries is creating two boundaries with the same name '" + b_name +
+                  "' but different ids: " + std::to_string(source_id) + " & " +
+                  std::to_string(b_id + bid_offset) +
+                  ".\n We recommend using a RenameBoundaryGenerator to prevent this as you "
+                  "will get errors reading the Exodus output later.");
+  }
 
   for (const auto & [nodeset_id, nodeset_name] : other_boundary.get_nodeset_name_map())
     boundary.set_nodeset_name_map().insert(
