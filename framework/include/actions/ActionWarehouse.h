@@ -92,6 +92,9 @@ public:
   ActionIterator actionBlocksWithActionEnd(const std::string & task);
   ///@}
 
+  /// Add an action while executing action
+  void lateAddAction(const std::string & task, Action * action);
+
   /**
    * Returns a reference to all of the actions.
    */

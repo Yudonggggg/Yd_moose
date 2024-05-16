@@ -99,6 +99,7 @@ addActionTypes(Syntax & syntax)
   registerMooseObjectTask("read_executor",                Executor,                  false);
   registerTask("add_executor", true);
   registerTask("init_physics", false);
+  registerTask("setup_component", false);
 
   // This task does not construct an object, but it needs all of the parameters that
   // would normally be used to construct an object.
@@ -309,6 +310,7 @@ addActionTypes(Syntax & syntax)
                            "(setup_time_integrator)"
                            "(setup_executioner)"
                            "(setup_executioner_complete)"
+                           "(setup_component)"  // no particular reason for that placement
                            "(read_executor)"
                            "(add_executor)"
                            "(check_integrity_early)"
@@ -433,6 +435,9 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
    */
   registerSyntax("DiffusionCG", "Physics/Diffusion/ContinuousGalerkin/*");
   registerSyntax("DiffusionFV", "Physics/Diffusion/FiniteVolume/*");
+
+  registerSyntax("AddActionComponentAction", "Components/*");
+  registerSyntax("CombineDisjoinedComponent", "Components");
 
   registerSyntaxTask("CopyNodalVarsAction", "Variables/*", "check_copy_nodal_vars");
   registerSyntaxTask("CopyNodalVarsAction", "Variables/*", "copy_nodal_vars");

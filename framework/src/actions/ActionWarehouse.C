@@ -183,6 +183,16 @@ ActionWarehouse::actionBlocksWithActionEnd(const std::string & task)
   return _action_blocks[task].end();
 }
 
+void
+ActionWarehouse::lateAddAction(const std::string & task, Action * action)
+{
+  _action_blocks[task].push_back(action);
+  _app.syntax().registerTaskName(new_task_name, /*auto-build*/ true);
+  // the registering has already been done
+  // Get it at the right place in _ordered_names by sorting
+  _ordered_names = _syntax.getSortedTask();
+}
+
 const std::vector<std::shared_ptr<Action>> &
 ActionWarehouse::allActionBlocks() const
 {
@@ -341,8 +351,10 @@ ActionWarehouse::executeAllActions()
     _console << "\n[DBG][ACT] Executing actions:" << std::endl;
   }
 
-  for (const auto & task : _ordered_names)
+  // Use indexed for-loop in case ordered names grows
+  for (unsigned int i = 0; i < _ordered_names.size(); i++)
   {
+    const auto & task = _ordered_names[i];
     executeActionsWithAction(task);
     _completed_tasks.insert(task);
     if (_final_task != "" && task == _final_task)
@@ -376,12 +388,11 @@ ActionWarehouse::executeActionsWithAction(const std::string & task)
       MemoryUtils::getMemoryStats(stats);
       auto usage =
           MemoryUtils::convertBytes(stats._physical_memory, MemoryUtils::MemUnits::Megabytes);
-      _console << "[DBG][ACT] "
-               << "TASK (" << COLOR_YELLOW << std::setw(24) << task << COLOR_DEFAULT << ") "
-               << "TYPE (" << COLOR_YELLOW << std::setw(32) << _current_action->type()
-               << COLOR_DEFAULT << ") "
-               << "NAME (" << COLOR_YELLOW << std::setw(16) << _current_action->name()
-               << COLOR_DEFAULT << ") Memory usage " << usage << "MB" << std::endl;
+      _console << "[DBG][ACT] " << "TASK (" << COLOR_YELLOW << std::setw(24) << task
+               << COLOR_DEFAULT << ") " << "TYPE (" << COLOR_YELLOW << std::setw(32)
+               << _current_action->type() << COLOR_DEFAULT << ") " << "NAME (" << COLOR_YELLOW
+               << std::setw(16) << _current_action->name() << COLOR_DEFAULT << ") Memory usage "
+               << usage << "MB" << std::endl;
     }
 
     _current_action->timedAct();
