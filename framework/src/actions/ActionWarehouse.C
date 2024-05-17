@@ -187,7 +187,7 @@ void
 ActionWarehouse::lateAddAction(const std::string & task, Action * action)
 {
   _action_blocks[task].push_back(action);
-  _app.syntax().registerTaskName(new_task_name, /*auto-build*/ true);
+  _app.syntax().registerTaskName(task, /*auto-build*/ true);
   // the registering has already been done
   // Get it at the right place in _ordered_names by sorting
   _ordered_names = _syntax.getSortedTask();
