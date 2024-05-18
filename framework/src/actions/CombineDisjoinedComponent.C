@@ -39,29 +39,45 @@ CombineDisjoinedComponent::act()
     std::vector<MeshGeneratorName> combined;
     std::vector<const ComponentAction *> components = _awh.getActions<ComponentAction>();
     for (const auto comp : components)
-      combined.push_back(comp->meshName());
+      if (comp->meshName() != "")
+        combined.push_back(comp->meshName());
 
     // TODO once we have junctions
     // Get the list of disconnected components
-    // Solve for disjoint groups
+    // Solve for disjoint groups, and only add those groups
 
     // Add the main mesh from the Mesh block, might as well
     const auto final_mg = _app.getMeshGeneratorSystem().getFinalMeshGeneratorName();
     // but only if no component are already defined on it
-    if (std::find(combined.begin(), combined.end(), final_mg) == combined.end())
-      combined.push_back(final_mg);
-    if (final_mg == "")
-      mooseError("Final mesh generator should be set");
+    if (_app.getMeshGeneratorSystem().getMeshGeneratorNames().size())
+    {
+      if (std::find(combined.begin(), combined.end(), final_mg) == combined.end())
+        combined.push_back(final_mg);
+      if (final_mg == "")
+        mooseError("Final mesh generator should be set for Mesh+Components to work together");
+    }
 
     // Combine everyone into a combiner
     InputParameters params = _factory.getValidParams("CombinerGenerator");
     params.set<std::vector<MeshGeneratorName>>("inputs") = combined;
     params.set<bool>("avoid_merging_subdomains") = true;
     params.set<bool>("avoid_merging_boundaries") = true;
-    params.set<bool>("output") = true;
 
-    _app.getMeshGeneratorSystem().appendMeshGenerator(
-        "CombinerGenerator", "component_combiner", params);
+    // Single component case
+    if (combined.size() == 1)
+      params.set<std::vector<Point>>("positions") = {Point(0, 0, 0)};
+
+    // Replace the current final MG if there are mesh generators
+    if (_app.getMeshGeneratorSystem().getMeshGeneratorNames().size())
+      _app.getMeshGeneratorSystem().appendMeshGenerator(
+          "CombinerGenerator", "component_combiner", params);
+    else
+    // No mesh generators somehow
+    {
+      mooseError("Do we ever get here?");
+      _app.getMeshGeneratorSystem().addMeshGenerator(
+          "CombinerGenerator", "component_combiner", params);
+    }
   }
   else
     mooseError("Registered to a task but not doing anything on that task");
