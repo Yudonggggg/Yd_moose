@@ -3,14 +3,24 @@
 #include <deque>
 #include <vector>
 
-namespace CapabilitiesParser
+namespace CapabilityUtils
 {
+
+enum class CapState
+{
+  FALSE,
+  MAYBE_FALSE,
+  UNKNOWN,
+  MAYBE_TRUE,
+  TRUE
+};
 
 struct Token
 {
   enum class Type
   {
     Unknown,
+    Result,
     VERSION,
     SYMBOL,
     OPERATOR,
@@ -20,6 +30,7 @@ struct Token
   std::string value;
   std::size_t begin, len;
   int precedence;
+  CapState state;
 
   void print() { std::cout << value << ' ' << static_cast<int>(type) << ' ' << precedence << '\n'; }
 };
@@ -246,6 +257,144 @@ shuntingYard(const std::string & expr)
   // Exit.
   return queue;
 }
+
+Result
+check(const std::string & requirements, const Registry & app_capabilities)
+{
+  if (requirements == "")
+    return {CapabilityUtils::CERTAIN_PASS, "Empty requirements", ""};
+
+  // build postfix notation (program)
+  auto program = CapabilitiesParser::shuntingYard(requirements);
+
+  // helper functions
+  auto makeTruthy =
+      [&app_capabilities, &requirements](Token & arg)
+  {
+    arg.type = Token::type::Result;
+
+    const auto it = app_capabilities.find(arg.value);
+    if (it != app_capabilities.end())
+    {
+      const auto app_value = it->second.first;
+      if (std::holds_alternative<bool>(app_value) && std::get<bool>(app_value) == false)
+        arg.state = CapState::FALSE;
+      else
+        arg.state = CapState::TRUE;
+    }
+    else
+      arg.state = CapState::MAYBE_FALSE;
+  }
+
+  // execute program
+  std::stack<Token>
+      stack;
+  for (const auto & instruction : program)
+    switch (instruction.type)
+    {
+      case Token::Type::VERSION:
+      case Token::Type::SYMBOL:
+        // If the token is a number, then add it to the output queue
+        stack.push(token);
+        break;
+
+      case Token::Type::OPERATOR:
+      {
+        // unary operator
+        if (instruction.value == "!")
+        {
+          if (stack.size() == 0)
+            throw std::runtime_error("Missing argument to ! operator.");
+          auto arg = stack.pop();
+          if (arg.type == Token::Type::SYMBOL || arg.type == Token::Type::Result)
+          {
+            if (arg.type == Token::Type::SYMBOL)
+              makeTruthy(arg);
+
+            // negate current capability state
+            switch (arg.state)
+            {
+              case CapState::FALSE:
+                arg.state = CapState::TRUE;
+                break;
+              case CapState::TRUE:
+                arg.state = CapState::FALSE;
+                break;
+              case CapState::MAYBE_FALSE:
+                arg.state = CapState::MAYBE_TRUE;
+                break;
+              case CapState::MAYBE_TRUE:
+                arg.state = CapState::MAYBE_FALSE;
+                break;
+              default:
+                arg.state = CapState::UNKNOWN;
+            }
+
+            // push result onto the stack
+            stack.push(arg);
+          }
+          else
+          {
+            throw std::runtime_error("Invalid argument to ! operator.");
+          }
+        }
+
+        else
+        {
+          // binary operator
+          if (stack.size < 2)
+            std::runtime_error("Insufficient arguments to " + instruction.value + " operator.");
+          right = stack.pop();
+          left = stack.pop();
+
+          if (instruction.value == "&" || instruction.value == "|")
+          {
+            // logic operators
+            if (left.type != Token::Type::Result)
+              makeTruthy(left);
+            if (right.type != Token::Type::Result)
+              makeTruthy(right);
+
+            // execute operator
+            const auto states = instruction.value == "&"
+                                    ? std::vector<CapState>{CapState::FALSE,
+                                                            CapState::MAYBE_FALSE,
+                                                            CapState::UNKNOWN,
+                                                            CapState::MAYBE_TRUE,
+                                                            CapState::TRUE}
+                                    : std::vector<CapState>{CapState::TRUE,
+                                                            CapState::MAYBE_TRUE,
+                                                            CapState::UNKNOWN,
+                                                            CapState::MAYBE_FALSE,
+                                                            CapState::FALSE};
+
+            for (const auto state : states)
+              if (left.state == state || right.state == state)
+              {
+                left.state = state;
+                break;
+              }
+
+            // push back result
+            stack.push(left);
+          }
+          else
+          {
+            // comparison operators
+            if (left.type != Token::Type::SYMBOL)
+              std::runtime_error(
+                  "Expected capability symbol on the left hand side..."); // but found
+
+            // perform comparison
+          }
+        }
+
+        default:
+          std::cout << "Error in program: ";
+          instruction.print();
+          break;
+      }
+    }
 }
 
 int
