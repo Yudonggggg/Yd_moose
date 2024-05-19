@@ -18,6 +18,7 @@ struct Token
     PARENRIGHT,
   } type;
   std::string value;
+  std::size_t begin, len;
   int precedence;
 
   void print() { std::cout << value << ' ' << static_cast<int>(type) << ' ' << precedence << '\n'; }
@@ -42,37 +43,38 @@ isSymbolCont(char d)
 }
 
 std::deque<Token>
-tokenize(std::string expr)
+tokenize(const std::string & expr)
 {
   std::deque<Token> tokens;
-  for (const auto * p = expr.c_str(); *p; ++p)
+  const auto * p = expr.c_str();
+  for (std::size_t i = 0; i < expr.length(); ++i)
   {
-    if (*p == '\t' || *p == ' ')
+    if (p[i] == '\t' || p[i] == ' ')
       continue;
-    else if (isVersion(*p))
+    else if (isVersion(p[i]))
     {
-      const auto * b = p;
-      while (isVersion(*p))
-        ++p;
-      const auto s = std::string(b, p);
-      tokens.push_back(Token{Token::Type::VERSION, s});
-      --p;
+      const auto b = i;
+      while (isVersion(p[i]))
+        ++i;
+      const auto s = std::string(p + b, p + i);
+      tokens.push_back(Token{Token::Type::VERSION, s, b, i - b});
+      --i;
     }
-    else if (isSymbolBegin(*p))
+    else if (isSymbolBegin(p[i]))
     {
-      const auto * b = p;
-      while (isSymbolCont(*p))
-        ++p;
-      const auto s = std::string(b, p);
-      tokens.push_back(Token{Token::Type::SYMBOL, s});
-      --p;
+      const auto b = i;
+      while (isSymbolCont(p[i]))
+        ++i;
+      const auto s = std::string(p + b, p + i);
+      tokens.push_back(Token{Token::Type::SYMBOL, s, b, i - b});
+      --i;
     }
     else
     {
       Token::Type t = Token::Type::Unknown;
       int precedence = -1;
-      int l = 1; // token length
-      switch (*p)
+      std::size_t l = 1; // token length
+      switch (p[i])
       {
         default:
           break;
@@ -85,13 +87,13 @@ tokenize(std::string expr)
         case '>':
           t = Token::Type::OPERATOR;
           precedence = 2;
-          if (*(p + 1) == '=')
+          if (p[i + 1] == '=')
             l = 2;
           break;
         case '<':
           t = Token::Type::OPERATOR;
           precedence = 2;
-          if (*(p + 1) == '=')
+          if (p[i + 1] == '=')
             l = 2;
           break;
         case '=':
@@ -108,7 +110,7 @@ tokenize(std::string expr)
           break;
         case '!':
           t = Token::Type::OPERATOR;
-          if (*(p + 1) == '=')
+          if (p[i + 1] == '=')
           {
             precedence = 2;
             l = 2;
@@ -117,9 +119,9 @@ tokenize(std::string expr)
           precedence = 3;
           break;
       }
-      const auto s = std::string(p, p + l);
-      tokens.push_back(Token{t, s, precedence});
-      p += l - 1;
+      const auto s = std::string(p + i, p + i + l);
+      tokens.push_back(Token{t, s, i, l, precedence});
+      i += l - 1;
     }
   }
 
@@ -127,10 +129,11 @@ tokenize(std::string expr)
 }
 
 std::deque<Token>
-shuntingYard(const std::deque<Token> & tokens)
+shuntingYard(const std::string & expr)
 {
   std::deque<Token> queue;
   std::vector<Token> stack;
+  const std::deque<Token> & tokens = tokenize(expr);
 
   // While there are tokens to be read:
   for (auto token : tokens)
@@ -248,13 +251,7 @@ shuntingYard(const std::deque<Token> & tokens)
 int
 main()
 {
-  auto tokens = CapabilitiesParser::tokenize("(petsc < 3.2.1 | slepc) & ad_size>=50 & !chaco");
-
-  std::cout << "== tokens ==\n";
-  for (auto t : tokens)
-    t.print();
-
-  auto stack = CapabilitiesParser::shuntingYard(tokens);
+  auto stack = CapabilitiesParser::shuntingYard("(petsc < 3.2.1 | slepc) & ad_size>=50 & !chaco");
   std::cout << "\n== stack ==\n";
   for (auto t : stack)
     t.print();
