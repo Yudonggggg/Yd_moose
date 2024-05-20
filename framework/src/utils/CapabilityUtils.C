@@ -7,26 +7,13 @@
 //* Licensed under LGPL 2.1, please see LICENSE for details
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#define BOOST_PARSER_DISABLE_HANA_TUPLE
-#include "libmesh/ignore_warnings.h"
-// these need to be added to libmesh
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wunused-variable"
-#pragma clang diagnostic ignored "-Wdangling-field"
-#endif
-#if defined(__GNUC__) && !defined(__INTEL_COMPILER) && !defined(__clang__)
-#pragma GCC diagnostic ignored "-Wunused-variable"
-#pragma GCC diagnostic ignored "-Wdangling-field"
-#pragma GCC diagnostic ignored "-Wattributes"
-#endif
-#include <boost/parser/parser.hpp>
-#include "libmesh/restore_warnings.h"
+#include <string>
+#include <iostream>
+#include <deque>
+#include <vector>
 
-#include "CapabilityUtils.h"
 #include "MooseUtilsStandalone.h"
 #include "MooseError.h"
-#include <vector>
-#include <set>
 
 namespace CapabilityUtils
 {
@@ -40,87 +27,283 @@ enum class CapState
   TRUE
 };
 
-// anonymous namespace
-namespace
+struct Token
 {
-namespace bp = boost::parser;
+  enum class Type
+  {
+    Unknown,
+    Result,
+    VERSION,
+    SYMBOL,
+    OPERATOR,
+    PARENLEFT,
+    PARENRIGHT,
+  } type;
+  std::string value;
+  std::size_t begin, len;
+  int precedence;
+  CapState state;
 
-//
-// semantic actions
-//
-
-// matching a capability name
-const auto f_name = [](auto & ctx)
-{
-  const auto name = _attr(ctx);
-  auto & seen_capabilities = std::get<1>(_globals(ctx));
-  seen_capabilities.insert(name);
-  _val(ctx) = name;
+  void print() { std::cout << value << ' ' << static_cast<int>(type) << ' ' << precedence << '\n'; }
 };
 
-// check bool existence
-const auto f_identifier = [](auto & ctx)
+bool
+isVersion(char d)
 {
-  const auto & app_capabilities = std::get<0>(_globals(ctx));
-  const auto it = app_capabilities.find(_attr(ctx));
-  if (it != app_capabilities.end())
+  return (d >= '0' && d <= '9') || d == '.';
+}
+
+bool
+isSymbolBegin(char d)
+{
+  return d >= 'a' && d <= 'z';
+}
+
+bool
+isSymbolCont(char d)
+{
+  return isSymbolBegin(d) || (d >= '0' && d <= '9') || d == '_';
+}
+
+std::deque<Token>
+tokenize(const std::string & expr)
+{
+  std::deque<Token> tokens;
+  const auto * p = expr.c_str();
+  for (std::size_t i = 0; i < expr.length(); ++i)
   {
-    const auto app_value = it->second.first;
-    if (std::holds_alternative<bool>(app_value) && std::get<bool>(app_value) == false)
+    if (p[i] == '\t' || p[i] == ' ')
+      continue;
+    else if (isVersion(p[i]))
     {
-      _val(ctx) = CapState::FALSE;
-      return;
+      const auto b = i;
+      while (isVersion(p[i]))
+        ++i;
+      const auto s = std::string(p + b, p + i);
+      tokens.push_back(Token{Token::Type::VERSION, s, b, i - b});
+      --i;
     }
-    _val(ctx) = CapState::TRUE;
-  }
-  else
-    _val(ctx) = CapState::MAYBE_FALSE;
-};
-
-// check non-existence
-const auto f_not_identifier = [](auto & ctx)
-{
-  const auto & app_capabilities = std::get<0>(_globals(ctx));
-  const auto it = app_capabilities.find(_attr(ctx));
-  if (it != app_capabilities.end())
-  {
-    const auto app_value = it->second.first;
-    if (std::holds_alternative<bool>(app_value) && std::get<bool>(app_value) == false)
+    else if (isSymbolBegin(p[i]))
     {
-      _val(ctx) = CapState::TRUE;
-      return;
+      const auto b = i;
+      while (isSymbolCont(p[i]))
+        ++i;
+      const auto s = std::string(p + b, p + i);
+      tokens.push_back(Token{Token::Type::SYMBOL, s, b, i - b});
+      --i;
     }
-    _val(ctx) = CapState::FALSE;
+    else
+    {
+      Token::Type t = Token::Type::Unknown;
+      int precedence = -1;
+      std::size_t l = 1; // token length
+      switch (p[i])
+      {
+        default:
+          break;
+        case '(':
+          t = Token::Type::PARENLEFT;
+          break;
+        case ')':
+          t = Token::Type::PARENRIGHT;
+          break;
+        case '>':
+          t = Token::Type::OPERATOR;
+          precedence = 2;
+          if (p[i + 1] == '=')
+            l = 2;
+          break;
+        case '<':
+          t = Token::Type::OPERATOR;
+          precedence = 2;
+          if (p[i + 1] == '=')
+            l = 2;
+          break;
+        case '=':
+          t = Token::Type::OPERATOR;
+          precedence = 2;
+          break;
+        case '&':
+          t = Token::Type::OPERATOR;
+          precedence = 1;
+          break;
+        case '|':
+          t = Token::Type::OPERATOR;
+          precedence = 1;
+          break;
+        case '!':
+          t = Token::Type::OPERATOR;
+          if (p[i + 1] == '=')
+          {
+            precedence = 2;
+            l = 2;
+            break;
+          }
+          precedence = 3;
+          break;
+      }
+      const auto s = std::string(p + i, p + i + l);
+      tokens.push_back(Token{t, s, i, l, precedence});
+      i += l - 1;
+    }
   }
-  else
-    _val(ctx) = CapState::MAYBE_TRUE;
-};
 
-// comparison operation
-const auto f_compare = [](auto & ctx)
+  return tokens;
+}
+
+std::deque<Token>
+shuntingYard(const std::string & expr)
 {
-  const auto & [left, op, right] = _attr(ctx);
-  static_assert(std::is_same_v<decltype(right), const std::variant<std::string, std::vector<int>>>,
-                "Unexpected RHS value type in comparison");
+  std::deque<Token> queue;
+  std::vector<Token> stack;
+  const std::deque<Token> & tokens = tokenize(expr);
 
-  // check existence
-  const auto & app_capabilities = std::get<0>(_globals(ctx));
-  const auto it = app_capabilities.find(left);
-  if (it == app_capabilities.end())
+  // While there are tokens to be read:
+  for (auto token : tokens)
   {
-    // return an unknown if the capability does not exist, this is important as it
-    // stays unknown upon negation
-    _val(ctx) = CapState::UNKNOWN;
-    return;
+    // Read a token
+    switch (token.type)
+    {
+      case Token::Type::VERSION:
+      case Token::Type::SYMBOL:
+        // If the token is a number, then add it to the output queue
+        queue.push_back(token);
+        break;
+
+      case Token::Type::OPERATOR:
+      {
+        // If the token is operator, o1, then:
+        const auto o1 = token;
+
+        // while there is an operator token,
+        while (!stack.empty())
+        {
+          // o2, at the top of stack, and
+          const auto o2 = stack.back();
+
+          // either o1 is left-associative and its precedence is
+          // *less than or equal* to that of o2,
+          // or o1 if right associative, and has precedence
+          // *less than* that of o2,
+          if (o1.precedence <= o2.precedence)
+          {
+            // then pop o2 off the stack,
+            stack.pop_back();
+            // onto the output queue;
+            queue.push_back(o2);
+
+            continue;
+          }
+
+          // @@ otherwise, exit.
+          break;
+        }
+
+        // push o1 onto the stack.
+        stack.push_back(o1);
+      }
+      break;
+
+      case Token::Type::PARENLEFT:
+        // If token is left parenthesis, then push it onto the stack
+        stack.push_back(token);
+        break;
+
+      case Token::Type::PARENRIGHT:
+        // If token is right parenthesis:
+        {
+          bool match = false;
+
+          // Until the token at the top of the stack
+          // is a left parenthesis,
+          while (!stack.empty() && stack.back().type != Token::Type::PARENLEFT)
+          {
+            // pop operators off the stack
+            // onto the output queue.
+            queue.push_back(stack.back());
+            stack.pop_back();
+            match = true;
+          }
+
+          if (!match && stack.empty())
+          {
+            // If the stack runs out without finding a left parenthesis,
+            // then there are mismatched parentheses.
+            printf("RightParen error (%s)\n", token.value.c_str());
+            return {};
+          }
+
+          // Pop the left parenthesis from the stack,
+          // but not onto the output queue.
+          stack.pop_back();
+        }
+        break;
+
+      default:
+        printf("error (%s)\n", token.value.c_str());
+        return {};
+    }
+
+    // debugReport(token, queue, stack);
   }
 
-  // capability is registered by the app
-  const auto & [app_value, doc] = it->second;
+  // When there are no more tokens to read:
+  //   While there are still operator tokens in the stack:
+  while (!stack.empty())
+  {
+    // If the operator token on the top of the stack is a parenthesis,
+    // then there are mismatched parentheses.
+    if (stack.back().type == Token::Type::PARENLEFT)
+    {
+      printf("Mismatched parentheses error\n");
+      return {};
+    }
 
+    // Pop the operator onto the output queue.
+    queue.push_back(std::move(stack.back()));
+    stack.pop_back();
+  }
+
+  // debugReport(Token { Token::Type::Unknown, "End" }, queue, stack);
+
+  // Exit.
+  return queue;
+}
+
+Result
+check(const std::string & requirements, const Registry & app_capabilities)
+{
+  if (requirements == "")
+    return {CapabilityUtils::CERTAIN_PASS, "Empty requirements", ""};
+
+  // build postfix notation (program)
+  auto program = CapabilitiesParser::shuntingYard(requirements);
+
+  // helper functions
+  auto makeTruthy =
+      [&app_capabilities, &requirements](Token & arg)
+  {
+    arg.type = Token::type::Result;
+
+    const auto it = app_capabilities.find(arg.value);
+    if (it != app_capabilities.end())
+    {
+      const auto app_value = it->second.first;
+      if (std::holds_alternative<bool>(app_value) && std::get<bool>(app_value) == false)
+        arg.state = CapState::FALSE;
+      else
+        arg.state = CapState::TRUE;
+    }
+    else
+      arg.state = CapState::MAYBE_FALSE;
+  }
   // comparator
-  auto comp = [](int i, auto a, auto b)
+  auto comp = [](std::string & c, auto a, auto b)
   {
-    switch (i)
+    static const std::unordered_map<std::string, int> comparison = {
+        {"<=", 0}, {">=", 1}, {"<", 2}, {">", 3}, {"!=", 4}, {"==", 5}, {"=", 5}};
+    const auto it = comparison.find(c);
+    switch (it->second)
     {
       case 0:
         return a <= b;
@@ -133,230 +316,118 @@ const auto f_compare = [](auto & ctx)
       case 4:
         return a != b;
       case 5:
-      case 6:
         return a == b;
     }
-    return false;
+    throw std::runtime_error("invalid comparison operator");
   };
 
-  // false bool capability will always fail any other comparison
-  if (std::holds_alternative<bool>(app_value) && !std::get<bool>(app_value))
-  {
-    _val(ctx) = CapState::FALSE;
-    return;
-  }
-
-  // string comparison
-  if (std::holds_alternative<std::string>(right))
-  {
-    // the app value has to be a string
-    if (!std::holds_alternative<std::string>(app_value))
+  // execute program
+  std::stack<Token> stack;
+  for (const auto & instruction : program)
+    switch (instruction.type)
     {
-      _error_handler(ctx).diagnose(
-          boost::parser::diagnostic_kind::error, "Unexpected comparison to a string.", ctx);
-      return;
-    }
+      case Token::Type::VERSION:
+      case Token::Type::SYMBOL:
+        // If the token is a number, then add it to the output queue
+        stack.push(token);
+        break;
 
-    _val(ctx) = comp(op,
-                     std::get<std::string>(app_value),
-                     MooseUtils::toLower(std::get<std::string>(right)))
-                    ? CapState::TRUE
-                    : CapState::FALSE;
-    return;
-  }
-
-  // number or version comparison
-  if (std::holds_alternative<std::vector<int>>(right))
-  {
-    const auto & test_value = std::get<std::vector<int>>(right);
-
-    // int comparison
-    if (std::holds_alternative<int>(app_value))
-    {
-      if (test_value.size() != 1)
+      case Token::Type::OPERATOR:
       {
-        _error_handler(ctx).diagnose(
-            boost::parser::diagnostic_kind::error, "Expected an integer value.", ctx);
-        return;
+        // unary operator
+        if (instruction.value == "!")
+        {
+          if (stack.size() == 0)
+            throw std::runtime_error("Missing argument to ! operator.");
+          auto arg = stack.pop();
+          if (arg.type == Token::Type::SYMBOL || arg.type == Token::Type::Result)
+          {
+            if (arg.type == Token::Type::SYMBOL)
+              makeTruthy(arg);
+
+            // negate current capability state
+            switch (arg.state)
+            {
+              case CapState::FALSE:
+                arg.state = CapState::TRUE;
+                break;
+              case CapState::TRUE:
+                arg.state = CapState::FALSE;
+                break;
+              case CapState::MAYBE_FALSE:
+                arg.state = CapState::MAYBE_TRUE;
+                break;
+              case CapState::MAYBE_TRUE:
+                arg.state = CapState::MAYBE_FALSE;
+                break;
+              default:
+                arg.state = CapState::UNKNOWN;
+            }
+
+            // push result onto the stack
+            stack.push(arg);
+          }
+          else
+          {
+            throw std::runtime_error("Invalid argument to ! operator.");
+          }
+        }
+
+        else
+        {
+          // binary operator
+          if (stack.size < 2)
+            std::runtime_error("Insufficient arguments to " + instruction.value + " operator.");
+          right = stack.pop();
+          left = stack.pop();
+
+          if (instruction.value == "&" || instruction.value == "|")
+          {
+            // logic operators
+            if (left.type != Token::Type::Result)
+              makeTruthy(left);
+            if (right.type != Token::Type::Result)
+              makeTruthy(right);
+
+            // execute operator
+            const auto states = instruction.value == "&"
+                                    ? std::vector<CapState>{CapState::FALSE,
+                                                            CapState::MAYBE_FALSE,
+                                                            CapState::UNKNOWN,
+                                                            CapState::MAYBE_TRUE,
+                                                            CapState::TRUE}
+                                    : std::vector<CapState>{CapState::TRUE,
+                                                            CapState::MAYBE_TRUE,
+                                                            CapState::UNKNOWN,
+                                                            CapState::MAYBE_FALSE,
+                                                            CapState::FALSE};
+
+            for (const auto state : states)
+              if (left.state == state || right.state == state)
+              {
+                left.state = state;
+                break;
+              }
+
+            // push back result
+            stack.push(left);
+          }
+          else
+          {
+            // comparison operators
+            if (left.type != Token::Type::SYMBOL)
+              std::runtime_error(
+                  "Expected capability symbol on the left hand side..."); // but found
+
+            // perform comparison
+          }
+        }
+
+        default:
+          std::cout << "Error in program: ";
+          instruction.print();
+          break;
       }
-
-      _val(ctx) =
-          comp(op, std::get<int>(app_value), test_value[0]) ? CapState::TRUE : CapState::FALSE;
-      return;
     }
-
-    // version comparison
-    std::vector<int> app_value_version;
-    if (!std::holds_alternative<std::string>(app_value) ||
-        !MooseUtils::tokenizeAndConvert(std::get<std::string>(app_value), app_value_version, "."))
-    {
-      if (test_value.size() == 1)
-        _error_handler(ctx).diagnose(boost::parser::diagnostic_kind::error,
-                                     test_value.size() == 1
-                                         ? "Cannot compare capability to a number."
-                                         : "Cannot compare capability to a version number.",
-                                     ctx);
-      return;
-    }
-
-    // compare versions
-    _val(ctx) = comp(op, app_value_version, test_value) ? CapState::TRUE : CapState::FALSE;
-    return;
-  }
-};
-
-const auto f_conjunction = [](auto & ctx)
-{
-  const auto & [s0, ss] = _attr(ctx);
-  CapState s = s0;
-  for (const auto & [op, sn] : ss)
-  {
-    if (op == 0)
-    {
-      // and
-      const auto states = {CapState::FALSE,
-                           CapState::MAYBE_FALSE,
-                           CapState::UNKNOWN,
-                           CapState::MAYBE_TRUE,
-                           CapState::TRUE};
-      for (const auto state : states)
-        if (s == state || sn == state)
-        {
-          s = state;
-          break;
-        }
-    }
-    else if (op == 1)
-    {
-      // or
-      const auto states = {CapState::TRUE,
-                           CapState::MAYBE_TRUE,
-                           CapState::UNKNOWN,
-                           CapState::MAYBE_FALSE,
-                           CapState::FALSE};
-      for (const auto state : states)
-        if (s == state || sn == state)
-        {
-          s = state;
-          break;
-        }
-    }
-    else
-      _error_handler(ctx).diagnose(boost::parser::diagnostic_kind::error, "Unknown operator", ctx);
-  }
-  _val(ctx) = s;
-};
-
-const auto f_negate = [](auto & ctx)
-{
-  // negate current capability state
-  switch (_attr(ctx))
-  {
-    case CapState::FALSE:
-      _val(ctx) = CapState::TRUE;
-      break;
-    case CapState::TRUE:
-      _val(ctx) = CapState::FALSE;
-      break;
-    case CapState::MAYBE_FALSE:
-      _val(ctx) = CapState::MAYBE_TRUE;
-      break;
-    case CapState::MAYBE_TRUE:
-      _val(ctx) = CapState::MAYBE_FALSE;
-      break;
-    default:
-      _val(ctx) = CapState::UNKNOWN;
-  }
-};
-
-const auto f_pass = [](auto & ctx)
-{
-  // pass through value
-  _val(ctx) = _attr(ctx);
-};
-
-// capability name
-bp::rule<struct start_letter_tag, char> start_letter = "first letter of an identifier";
-bp::rule<struct cont_letter_tag, char> cont_letter = "continuation of an identifier";
-bp::rule<struct name_tag, std::string> name = "capability name";
-
-auto const start_letter_def = bp::lower | bp::upper | bp::char_('_');
-auto const cont_letter_def = start_letter_def | bp::digit;
-auto const name_def = (start_letter >> *(cont_letter))[f_name];
-
-// symbols
-bp::symbols<int> const comparison = {
-    {"<=", 0}, {">=", 1}, {"<", 2}, {">", 3}, {"!=", 4}, {"==", 5}, {"=", 5}};
-bp::symbols<int> const conjunction = {{"&", 0}, {"|", 1}};
-
-// capability value
-bp::rule<struct generic_tag, std::string> generic = "generic capability value";
-bp::rule<struct version_tag, std::vector<int>> version = "version number";
-bp::rule<struct value_tag, std::variant<std::string, std::vector<int>>> value = "capability value";
-
-auto const generic_def = +(bp::lower | bp::upper | bp::digit | bp::char_('_') | bp::char_('-'));
-auto const version_def = bp::uint_ >> *('.' >> bp::uint_);
-auto const value_def = version | generic;
-
-// expression
-bp::rule<struct expr_tag, CapState> expr = "boolean expression";
-bp::rule<struct p_conjunction_tag, CapState> p_conjunction = "conjunction expression";
-bp::rule<struct bool_statement_tag, CapState> bool_statement = "bool statement";
-
-auto const expr_def = p_conjunction;
-auto const p_conjunction_def = (bool_statement > *(conjunction > bool_statement))[f_conjunction];
-auto const bool_statement_def = ('!' >> name)[f_not_identifier] |
-                                (name >> comparison >> value)[f_compare] | name[f_identifier] |
-                                ('(' > expr > ')')[f_pass] | ("!(" > expr > ')')[f_negate];
-
-#include "libmesh/ignore_warnings.h"
-BOOST_PARSER_DEFINE_RULES(
-    start_letter, cont_letter, name, generic, version, value, p_conjunction, expr, bool_statement);
-#include "libmesh/restore_warnings.h"
-} // namespace
-
-Result
-check(const std::string & requirements, const Registry & app_capabilities)
-{
-  if (requirements == "")
-    return {CapabilityUtils::CERTAIN_PASS, "Empty requirements", ""};
-
-  std::set<std::string> seen_capabilities;
-
-  // globals for the parser
-  auto globals = std::tie(app_capabilities, seen_capabilities);
-
-  // error handler
-  bp::callback_error_handler ceh([](std::string const & msg) { mooseError(msg); },
-                                 [](std::string const & msg) { mooseWarning(msg); });
-#include "libmesh/ignore_warnings.h"
-// these need to be added to libmesh
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wtype-limits"
-#endif
-#if defined(__GNUC__) && !defined(__INTEL_COMPILER) && !defined(__clang__)
-#pragma GCC diagnostic ignored "-Wunused-but-set-parameter"
-#pragma GCC system_header
-#endif
-
-  // parse
-  auto const result = bp::parse(requirements,
-                                bp::with_error_handler(bp::with_globals(expr, globals), ceh),
-                                bp::ws); //, bp::trace::on);
-
-#include "libmesh/restore_warnings.h"
-
-  // reduce result
-  if (!result.has_value())
-    mooseError("Failed to parse requirements '", requirements, "'");
-
-  CheckState state = static_cast<CheckState>(result.value());
-  std::string reason;
-  std::string doc;
-
-  return {state, reason, doc};
 }
-} // namespace CapabilityUtils
-
-// Fix: ../modules/solid_mechanics/examples/cframe_iga/tests
-// ../test/tests/meshgenerators/file_mesh_generator/tests
+}
