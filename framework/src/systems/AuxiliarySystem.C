@@ -253,16 +253,6 @@ AuxiliarySystem::addVariable(const std::string & var_type,
 }
 
 void
-AuxiliarySystem::addTimeIntegrator(const std::string & type,
-                                   const std::string & name,
-                                   InputParameters & parameters)
-{
-  parameters.set<SystemBase *>("_sys") = this;
-  std::shared_ptr<TimeIntegrator> ti = _factory.create<TimeIntegrator>(type, name, parameters);
-  _time_integrator = ti;
-}
-
-void
 AuxiliarySystem::addKernel(const std::string & kernel_name,
                            const std::string & name,
                            InputParameters & parameters)
@@ -383,8 +373,9 @@ void
 AuxiliarySystem::compute(ExecFlagType type)
 {
   // avoid division by dt which might be zero.
-  if (_fe_problem.dt() > 0. && _time_integrator)
-    _time_integrator->preStep();
+  if (_fe_problem.dt() > 0.)
+    for (auto & ti : _time_integrators)
+      ti->preStep();
 
   // We need to compute time derivatives every time each kind of the variables is finished, because:
   //
@@ -398,8 +389,9 @@ AuxiliarySystem::compute(ExecFlagType type)
   {
     computeScalarVars(type);
     // compute time derivatives of scalar aux variables _after_ the values were updated
-    if (_fe_problem.dt() > 0. && _time_integrator)
-      _time_integrator->computeTimeDerivatives();
+    if (_fe_problem.dt() > 0.)
+      for (auto & ti : _time_integrators)
+        ti->computeTimeDerivatives();
   }
 
   if (_vars[0].fieldVariables().size() > 0)
@@ -413,8 +405,9 @@ AuxiliarySystem::compute(ExecFlagType type)
     computeElementalVars(type);
 
     // compute time derivatives of nodal aux variables _after_ the values were updated
-    if (_fe_problem.dt() > 0. && _time_integrator)
-      _time_integrator->computeTimeDerivatives();
+    if (_fe_problem.dt() > 0.)
+      for (auto & ti : _time_integrators)
+        ti->computeTimeDerivatives();
   }
 
   if (_serialized_solution.get())
