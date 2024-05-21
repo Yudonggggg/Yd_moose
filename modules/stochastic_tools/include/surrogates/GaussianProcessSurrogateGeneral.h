@@ -14,16 +14,19 @@
 #include "Standardizer.h"
 #include <Eigen/Dense>
 #include "CovarianceInterface.h"
-#include "GaussianProcessHandler.h"
+#include "GaussianProcessGeneral.h"
 
-class GaussianProcess : public SurrogateModel, public CovarianceInterface
+class GaussianProcessSurrogateGeneral : public SurrogateModel, public CovarianceInterface
 {
 public:
   static InputParameters validParams();
-  GaussianProcess(const InputParameters & parameters);
+  GaussianProcessSurrogateGeneral(const InputParameters & parameters);
   using SurrogateModel::evaluate;
-  virtual Real evaluate(const std::vector<Real> & x) const override;
-  virtual Real evaluate(const std::vector<Real> & x, Real & std) const override;
+  virtual Real evaluate(const std::vector<Real> & x) const;
+  virtual void evaluate(const std::vector<Real> & x, std::vector<Real> & y) const;
+  virtual Real evaluate(const std::vector<Real> & x, Real & std) const;
+  virtual void
+  evaluate(const std::vector<Real> & x, std::vector<Real> & y, std::vector<Real> & std) const;
 
   /**
    * This function is called by LoadCovarianceDataAction when the surrogate is
@@ -32,12 +35,18 @@ public:
    */
   virtual void setupCovariance(UserObjectName _covar_name);
 
-  StochasticTools::GaussianProcessHandler & gpHandler() { return _gp_handler; }
-  const StochasticTools::GaussianProcessHandler & getGPHandler() const { return _gp_handler; }
+  StochasticTools::GaussianProcessGeneral & gp() { return _gp; }
+  const StochasticTools::GaussianProcessGeneral & getGP() const { return _gp; }
 
 private:
-  StochasticTools::GaussianProcessHandler & _gp_handler;
+  StochasticTools::GaussianProcessGeneral & _gp;
 
   /// Paramaters (x) used for training
   const RealEigenMatrix & _training_params;
+
+  /// Number of input parameters
+  const unsigned int & _n_dims;
+
+  /// The number of outputs
+  const unsigned int & _n_outputs;
 };
