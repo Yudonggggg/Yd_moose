@@ -1,0 +1,43 @@
+{
+    "reporters": {
+        "from_sub_rep": {
+            "type": "ConstantReporter",
+            "values": {
+                "rec_vec": {
+                    "type": "std::vector<double>"
+                },
+                "rec_vec_vec": {
+                    "type": "std::vector<std::vector<double>>"
+                }
+            }
+        }
+    },
+    "time_steps": [
+        {
+            "from_sub_rep": {
+                "rec_vec": [
+                    -1.0,
+                    -1.0,
+                    -1.0,
+                    -1.0
+                ],
+                "rec_vec_vec": [
+                    [
+                        0.0
+                    ],
+                    [
+                        0.0
+                    ],
+                    [
+                        0.0
+                    ],
+                    [
+                        0.0
+                    ]
+                ]
+            },
+            "time": 1.0,
+            "time_step": 1
+        }
+    ]
+}
