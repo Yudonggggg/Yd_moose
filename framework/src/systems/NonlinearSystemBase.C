@@ -439,17 +439,6 @@ NonlinearSystemBase::setupFieldDecomposition()
 }
 
 void
-NonlinearSystemBase::addTimeIntegrator(const std::string & type,
-                                       const std::string & name,
-                                       InputParameters & parameters)
-{
-  parameters.set<SystemBase *>("_sys") = this;
-
-  std::shared_ptr<TimeIntegrator> ti = _factory.create<TimeIntegrator>(type, name, parameters);
-  _time_integrator = ti;
-}
-
-void
 NonlinearSystemBase::addKernel(const std::string & kernel_name,
                                const std::string & name,
                                InputParameters & parameters)
@@ -839,8 +828,11 @@ NonlinearSystemBase::computeResidualTags(const std::set<TagID> & tags)
     if (required_residual)
     {
       auto & residual = getVector(residualVectorTag());
-      if (_time_integrator)
-        _time_integrator->postResidual(residual);
+      if (!_time_integrators.empty())
+      {
+        for (auto & ti : _time_integrators)
+          ti->postResidual(residual);
+      }
       else
         residual += *_Re_non_time;
       residual.close();
@@ -897,8 +889,11 @@ NonlinearSystemBase::computeResidualAndJacobianTags(const std::set<TagID> & vect
     if (required_residual)
     {
       auto & residual = getVector(residualVectorTag());
-      if (_time_integrator)
-        _time_integrator->postResidual(residual);
+      if (!_time_integrators.empty())
+      {
+        for (auto & ti : _time_integrators)
+          ti->postResidual(residual);
+      }
       else
         residual += *_Re_non_time;
       residual.close();
@@ -919,8 +914,8 @@ NonlinearSystemBase::computeResidualAndJacobianTags(const std::set<TagID> & vect
 void
 NonlinearSystemBase::onTimestepBegin()
 {
-  if (_time_integrator)
-    _time_integrator->preSolve();
+  for (auto & ti : _time_integrators)
+    ti->preSolve();
   if (_predictor.get())
     _predictor->timestepSetup();
 }

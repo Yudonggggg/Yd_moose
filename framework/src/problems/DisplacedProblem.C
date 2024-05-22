@@ -68,8 +68,7 @@ DisplacedProblem::DisplacedProblem(const InputParameters & parameters)
     for (unsigned int i = 0; i < n_threads; ++i)
       _assembly[i].emplace_back(std::make_unique<Assembly>(*displaced_nl, i));
 
-    displaced_nl->addTimeIntegrator(
-        _mproblem.getNonlinearSystemBase(nl_sys_num).getSharedTimeIntegrator());
+    displaced_nl->copyTimeIntegrators(_mproblem.getNonlinearSystemBase(nl_sys_num));
   }
 
   _nl_solution.resize(_displaced_solver_systems.size(), nullptr);
@@ -80,7 +79,7 @@ DisplacedProblem::DisplacedProblem(const InputParameters & parameters)
                                         _mproblem.getAuxiliarySystem(),
                                         "displaced_" + _mproblem.getAuxiliarySystem().name(),
                                         Moose::VAR_AUXILIARY);
-  _displaced_aux->addTimeIntegrator(_mproblem.getAuxiliarySystem().getSharedTimeIntegrator());
+  _displaced_aux->copyTimeIntegrators(_mproblem.getAuxiliarySystem());
 
   // // Generally speaking, the mesh is prepared for use, and consequently remote elements are deleted
   // // well before our Problem(s) are constructed. Historically, in MooseMesh we have a bunch of
