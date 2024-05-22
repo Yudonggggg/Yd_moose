@@ -1,16 +1,85 @@
 #!/bin/bash
-#PBS -N <JOB_NAME>
-#PBS -l select=<NODES>:ncpus=<MPI_PROCS>
-#PBS -l walltime=<WALLTIME>
-<PBS_PROJECT>
-<PBS_QUEUE>
+#PBS -N {{ NAME }}
+#PBS -l select={{ SELECT }}
+#PBS -l walltime={{ WALLTIME }}
+#PBS -P {{ PROJECT }}
+{%- if QUEUE is defined %}
+#PBS -q {{ QUEUE }}
+{%- endif %}
 #PBS -j oe
-#PBS -o <OUTPUT>
-#PBS -l place=free
-<PRE_COMMAND>
-JOB_NUM=${PBS_JOBID%\.*}
+#PBS -o {{ OUTPUT }}
+#PBS -l place={{ PLACE }}
 
-export MV2_ENABLE_AFFINITY=0
+# Exit on failure
+set -e
 
-cd <WORKING_DIR>
-<COMMAND>
+{%- if SOURCE_FILE is defined %}
+# Loaded from {{ SOURCE_FILE }}
+{{ SOURCE_CONTENTS }}
+{%- endif %}
+
+# Add MOOSE's python path for python scripts
+export PYTHONPATH={{ MOOSE_PYTHONPATH }}:${PYTHONPATH}
+
+# Print a useful header
+echo "################################################################################"
+echo "TestHarness RunPBS job on $(hostname) in job ${PBS_JOBID}"
+echo "Time: $(date)"
+echo 'Test: {{ TEST_SPEC }}:{{ TEST_NAME }}'
+echo 'Directory: {{ CWD }}'
+echo 'Command: {{ COMMAND_PRINTABLE }}'
+echo 'Submitted hostname: {{ SUBMITTED_HOSTNAME }}'
+echo 'Submission script: {{ SUBMISSION_SCRIPT }}'
+echo 'Output: {{ OUTPUT }}'
+module list
+echo "################################################################################"
+echo "Beginning TestHarness RunHPC test execution"
+echo "################################################################################"
+
+# Move into the test directory
+cd {{ CWD }}
+
+# Don't exit on failure: need to capture the actual run's return code
+set +e
+
+# Run the command
+{{ COMMAND }}
+# ...and capture the return code cause we're not done yet
+return_code=$?
+
+# Exit on failure
+set -e
+
+# We will read this output later on to try to capture the return code
+# in the event that PBS doesn't get it to us correctly
+echo "################################################################################"
+echo "Completed TestHarness RunHPC test execution; exit code = $return_code"
+
+# Append a terminator to all of the output files for file syncing across NFS
+ADDITIONAL_OUTPUT_FILES=({{ ADDITIONAL_OUTPUT_FILES }})
+for file in ${ADDITIONAL_OUTPUT_FILES[@]}; do
+    if [ ! -e "$file" ]; then
+        echo "Failed to finalize output $file"
+        continue
+    fi
+
+    # No newline for binaries
+    if [[ $(file --mime-encoding ${file}) = *binary ]]; then
+        printf "{{ ENDING_COMMENT }}" >> $file;
+    # Newline for plain text
+    else
+        printf "\n{{ ENDING_COMMENT }}" >> $file;
+    fi
+    echo "Finalized output $file"
+done
+
+echo "################################################################################"
+
+# Append a recognizable string at the end of the output. We look
+# for this string when parsing the output so that we can be sure
+# that we have obtained all of the output
+printf "\n{{ ENDING_COMMENT }}"
+
+# Exit with the real return code from the job that we ran
+exit $return_code
+
