@@ -147,6 +147,18 @@ protected:
 
   /// 2 * shear modulus
   GenericReal<is_ad> _two_shear_modulus;
+
+  /// Matrix form of the elasticity tensor
+  GenericDenseMatrix<is_ad> _C;
+
+  /// Name of the elasticity tensor material property
+  const std::string _elasticity_tensor_name;
+
+  /// Anisotropic elasticity tensor material property
+  const GenericMaterialProperty<RankFourTensor, is_ad> & _elasticity_tensor;
+
+  /// Materials's elasticity tensor is anisotropic or not
+  bool _anisotropic_elasticity;
 };
 
 typedef HillCreepStressUpdateTempl<false> HillCreepStressUpdate;
