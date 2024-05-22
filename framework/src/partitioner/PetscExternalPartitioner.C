@@ -94,9 +94,9 @@ PetscExternalPartitioner::partition(MeshBase & mesh, const unsigned int n_parts)
   if (mesh.is_replicated() && n_parts > 1)
     preLinearPartition(mesh);
 
-  if ((mesh.n_elem() / n_parts < 20) && _part_package == "parmetis")
+  if ((mesh.n_elem() / n_parts < 28) && _part_package == "parmetis")
   {
-    mooseWarning("Number of elements per compute node must be less than 32, otherwise we switch to "
+    mooseWarning("Number of elements per compute node must be less than 28, otherwise we switch to "
                  "PTScotch");
     _part_package = "ptscotch";
   }
