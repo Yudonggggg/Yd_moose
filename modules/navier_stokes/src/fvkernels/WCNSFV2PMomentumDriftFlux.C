@@ -26,13 +26,15 @@ WCNSFV2PMomentumDriftFlux::validParams()
   params.addParam<MooseFunctorName>("w_slip", "The slip velocity in the z direction.");
   params.addRequiredParam<MooseFunctorName>("rho_d", "Dispersed phase density.");
   params.addParam<MooseFunctorName>("fd", 0.0, "Fraction dispersed phase.");
+  params.renameParam("fd", "fraction_dispersed", "");
 
   MooseEnum coeff_interp_method("average harmonic", "harmonic");
   params.addParam<MooseEnum>("density_interp_method",
                              coeff_interp_method,
                              "Switch that can select face interpolation method for the density.");
 
-  params.set<unsigned short>("ghost_layers") = 2;
+  // when using the fraction of the disperse phase, somehow
+  params.set<unsigned short>("ghost_layers") = 5;
   return params;
 }
 
@@ -53,6 +55,11 @@ WCNSFV2PMomentumDriftFlux::WCNSFV2PMomentumDriftFlux(const InputParameters & par
   if (_dim >= 3 && !_w_slip)
     mooseError(
         "In three dimensions, the w_slip velocity must be supplied using the 'w_slip' parameter");
+
+  // Phase fraction could be a nonlinear variable
+  const auto & fraction_name = getParam<MooseFunctorName>("fraction_dispersed");
+  if (isParamValid("fraction_dispersed") && _fe_problem.hasVariable(fraction_name))
+    addMooseVariableDependency(&_fe_problem.getVariable(0, fraction_name));
 }
 
 ADReal
